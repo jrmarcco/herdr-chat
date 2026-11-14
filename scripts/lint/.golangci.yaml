@@ -1,0 +1,109 @@
+version: "2"
+
+# 基线档：
+# 低误报、高信号，任何 Go 项目 ( 含存量代码 ) 启用当天应保持全绿，可作 CI 阻断。
+#
+# 观点/约定类检查见 .golangci.strict.yaml ( 严格档 )，由 `make lint-strict` 使用。
+
+run:
+  # Timeout for total work, e.g. 30s, 5m, 5m30s.
+  # If the value is lower or equal to 0, the timeout is disabled.
+  # Default: 0 (disabled)
+  timeout: 5m
+  # 路径一律以 git 仓库根为基准。
+  # 配置在子目录时默认的 cfg 模式会让相对路径指向 scripts/lint/ 下，
+  # 导致 exclusions 规则静默失效，必须显式指定 gitroot。
+  relative-path-mode: gitroot
+
+linters:
+  default: none
+  enable:
+    # ==================== 四大件 ====================
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+
+    # ==================== 错误处理与资源 ====================
+    # Suggests to use `%w` for error-wrapping.
+    - errorlint
+    # Requires returning error in `if err != nil` branches.
+    - nilerr
+    # Finds HTTP request without context.Context.
+    - noctx
+    # Checks whether HTTP response body is closed.
+    - bodyclose
+    # Checks for two durations multiplied together.
+    - durationcheck
+
+    # ==================== 零误报杂项 ====================
+    - unconvert
+    - wastedassign
+    - misspell
+    - usestdlibvars
+    - predeclared
+    - copyloopvar
+    - asasalint
+    - goprintffuncname
+    - reassign
+    - bidichk
+    - nakedret
+
+    # ==================== 结构与安全 ====================
+    - gosec
+    - unparam
+    - goconst
+    # Enforce slog usage conventions (matches the depguard policy below).
+    - sloglint
+
+    # ==================== 测试与元信息 ====================
+    - usetesting
+    - thelper
+    - tparallel
+    - testableexamples
+    - gomoddirectives
+    # Requires nolint directives to be specific and explained.
+    - nolintlint
+
+  settings:
+    errcheck:
+      # 也检查类型断言的错误返回。check-blank ( `_ = f()` ) 属观点类，在严格档开启。
+      check-type-assertions: true
+    govet:
+      enable:
+        - nilness
+        - shadow
+    gosec:
+      excludes:
+        - G115 # 整型截断类转换误报率高，按需单独处理。
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    nolintlint:
+      allow-unused: false # report any unused nolint directives
+      require-explanation: true # require an explanation for nolint directives
+      require-specific: true # require nolint directives to be specific about which linter is being skipped
+
+    # 注意：staticcheck 的 checks 一旦设置会 "整体替换" 默认检查集。
+    # 只写 ["-SA4008"] 会把 SA/ST 全系静默关掉；排除某项必须写成 ["all", "-SA4008"]。
+    # 本配置不设置 checks，即使用默认全集。
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: "标准库 errors + fmt %w 已覆盖其全部能力"
+            - pkg: github.com/sirupsen/logrus
+              desc: "日志请用 log/slog 或 go.uber.org/zap"
+        # 项目专属规则示例 ( 按项目需要增删；files 匹配不到任何文件时规则空转 )：
+        # pkg-layer:
+        #   files:
+        #     - "**/pkg/**/*.go"
+        #   deny:
+        #     - pkg: go.uber.org/zap
+        #       desc: "pkg 层保持框架无关，使用 log/slog"
+
+formatters:
+  enable:
+    - gofumpt

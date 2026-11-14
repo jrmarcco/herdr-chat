@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Go
+/bin/
+/dist/
+
+# 本地试验
+*.local.env
