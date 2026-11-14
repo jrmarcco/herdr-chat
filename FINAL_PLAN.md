@@ -144,9 +144,8 @@ spec §14 的 M1–M8 为主干，delta 如下（**加粗**为新增出口标准
 | M2 | 引擎（房间/发帖/游标/活卡片/总览/入口） | — |
 | M3 | 对话框三通路 + hook + 菜单解析 | **§2.C：`testdata/screens/` ≥20 真实样本，menu/screen 表驱动全绿** |
 | M4 | readers ×3 + meter/footer | **§2.B：Item.Card + claude 子代理/工作流卡 golden；compact 工具行；§2.A：claude/codex 命令目录 + `/commands` 卡片；GLM 限额（上游 1.12）** |
-| M5 | Telegram | —（C1 分 chat 队列已计入） |
-| M6 | 飞书 | — |
-| M7 | CLI 全命令 + 服务 + hooks 安装器 | — |
+| M5 | 飞书 | — |
+| M6 | CLI 全命令 + 服务 + hooks 安装器 | — |
 | **M7.5** | **`herdrchat update`（goreleaser 链路）** | **bot 更新提示语义对齐上游 1.11** |
 | M8 | 端到端验收 + 文档 + 迁移说明 | **THIRD-PARTY-NOTICES、skill 增补（抓样本/fix 分诊）**；之后进入 §2.6 backlog |
 
