@@ -11,7 +11,7 @@
 | M5 飞书 | ✅ 完成（2026-11-14） | 卡片 schema 2.0 / larkws / 设备流 / 补收 / 回执全绿（13+ 用例） |
 | M6 CLI 全命令 + 服务 + hooks 安装器 | ✅ 完成（2026-11-14） | §13.11,12：服务快照、hooks 安装/卸载、--profile/usage/EPIPE 全绿；配对补齐 |
 | M7.5 `herdrchat update`（goreleaser） | ✅ 完成（2026-11-14） | goreleaser 链路验证过 snapshot 产物；update 对真实产物本地 E2E 对拍通过 |
-| M8 端到端验收 + 文档 + 迁移说明 | ⬜ 未开始 | + THIRD-PARTY-NOTICES |
+| M8 端到端验收 + 文档 + 迁移说明 | ✅ 完成（2026-11-15） | 冒烟全链路：systemd install + tag→release→update×2 + CI 修复；THIRD-PARTY-NOTICES、迁移说明、skill 增补 |
 
 ## 工程约定（用户设定，2026-11-14）
 
@@ -127,3 +127,15 @@
 - **验证**：update 全流程在注入的 Latest/Download 上 8 个用例（--check 不动二进制、已最新、替换+mode 0755、篡改字节拒装、缺平台资产、pid SIGTERM 真进程、服务重启调用序列、资产名与模板一致）；引擎提示 2 个用例（同版一次、更大版本再提示；同版/更旧/问不出/dev 全安静）；**真实产物 E2E**——本地起一个 GitHub API 形状的 HTTP 服务，用 snapshot 二进制真跑 `update`：下载真 tar.gz、校验真 checksums、原子替换、换完的二进制照常 `version`。
 
 **留待 M8 的**：真实打 tag 出 release 走一遍 CI（需要仓库写权限）；真实 GitHub 上 `update` 的最终对拍。其余按 M8 计划：端到端冒烟、对拍、THIRD-PARTY-NOTICES、文档与迁移说明。
+
+## M8 落了什么（2026-11-15）
+
+冒烟环境：本机 WSL2 Linux（systemd user 会话、linger 已开）、真实 hc（43 终端）+ 真实飞书 profile `default`。
+
+- **install 冒烟**：从 HEAD 重build 二进制后 `herdrchat install` —— 停掉 hc 终端形态、写 `~/.config/systemd/user/herdrchat-default.service`（Restart=always/RestartSec=5/WantedBy=default.target、env 白名单、输出进 `service.out.log`）→ 服务 active、`hc events --json` 子进程就位、waitConnected 收口于 `feishu connected`；`status` 报 "runs as service (systemd)"。
+- **发布链路 ×2**：tag `v1.0.0`（首个 Go 发布，功能基线 = Node v1.10.2 + 1.11 update + 1.12 GLM 限额）与 `v1.0.1` → release.yml（vet + race 测试过了才放行）→ GitHub release 各 5 资产（4 平台 tar.gz + checksums，命名与 update 的 `assetName` 模板一致）。
+- **update ×2（真实 GitHub）**：dev（`v0.0.0-…`）→ 1.0.0（走"dev build: bringing in the release anyway"分支）与 1.0.0 → 1.0.1（真实 `Newer` 比较路径）——查 latest → 下载本平台 tar.gz + checksums → sha256 对拍 → tar 解出 → 同目录临时文件 + rename 原子替换 → systemctl 重启 → waitConnected ✅，无 `.herdrchat-new` 残留。
+- **update 故障路径顺带真实验证**：本机直连 GitHub release CDN 超时 → 干净报错 exit 1、二进制未动、bot 不受影响；带 `HTTPS_PROXY` 重跑即成（下载走环境代理，设计使然；CN 网络下需自备代理）。
+- **CI lint 修复**：ci.yml 的 Lint 此前从未绿过（`golangci-lint exit with code 3` = typecheck 失败，非 findings）。根因：golangci-lint 2.15.0（2026-10-16 发布，构建于 go1.27.3）× setup-go 按 `go 1.27` 装到的 go1.27.4——分析工具链新于构建工具链即硬失败，本地 1.27.3 所以全绿。修法：`version: v2.15.0` 与 `go-version: "1.27.3"` **成对钉死**（升 golangci-lint 时一起动，ci.yml 有注释）；action 升 v7、checkout v5、setup-go v6 清 Node20 弃用告警。修后 ci 绿。
+- **M8 交付物**：`THIRD-PARTY-NOTICES`（zhangxiangliang MIT；cobanov Apache-2.0，其 LICENSE/NOTICE 原文入库 `THIRD-PARTY/cobanov-*`；lark SDK 一行）；迁移说明（guide.md 新节 "Migrating from the Node version"：停旧 → 放二进制 → `herdrchat start`，config/state/asks/ask.sh 原样接管、双版本不并跑、Telegram profile 留 Node；README×2 加指引）；skill 增补（ops.md 错误分诊表——errors.go 11 条哨兵错误的话术与处置 + "Capturing a screen sample" 抓样本指引；SKILL.md 引用行同步）。
+- 冒烟口径：setup/pair/发消息/点按钮在功能测试阶段（M5/M6 + 用户实测）已过，本轮补齐 install、发布与 update 链路及文档收口；`§2.6 backlog`（blockedPrompt、attach 流式）为后续工作。
