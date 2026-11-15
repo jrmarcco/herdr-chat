@@ -46,7 +46,7 @@ agent 支持：**Claude Code、Codex、OpenCode** 全量镜像（对话、对话
 
 ### 需要什么
 
-- **herdr**：herdrchat 建在它上面，没有它什么都做不了。先从 [herdr.dev](https://herdr.dev)
+- **herdr-core**：herdrchat 建在它上面，没有它什么都做不了。先从 [herdr.dev](https://herdr.dev)
   装好（也可以让编程 agent 带你装：`/herdrchat setup` 会处理），hc 要在本机跑着至少一个
   session（`ls ~/.local/state/herdr-core`）。
 - **macOS 或 Linux**：herdrchat 是单二进制，无其他依赖。
@@ -137,35 +137,41 @@ release 时 bot 自己会提示 owner（只提示，不自动升级）。
 ### 数据流
 
 ```
-                 飞书 （larkws 出站长连接：事件、卡片回调；无公网暴露）
-                  ⇅ 消息 · 卡片 · 按钮 · 回执 · 补收
-        ┌─────────────────────────────────────────────┐
-        │ internal/chats/feishu                        │
-        │ （Chat 契约实现：卡片 schema 2.0、群/标签、  │
-        │   /auth 设备流、离线补收、限速）             │
-        └──────────────────┬──────────────────────────┘
-             chats.Chat 契约（internal/chats/chat.go）
-                  ⇅
-        ┌─────────────────────────────────────────────┐
-        │ internal/engine（编排核心）                  │
-        │  rooms      每 tab 一房间的生命周期          │
-        │  posting    发帖管线/活卡片/图片预上传       │
-        │  dialogs    对话框状态机（三通路+防陈旧）    │
-        │  intake     聊天侧输入（注入/hook 回写）     │
-        │  overview   总览（去抖原地编辑）             │
-        │  · 每终端一条串行车道（lane）保序            │
-        └──┬──────────┬──────────────┬───────────────┘
-   readers.Reader 契约 │              │ HC 契约（core.HC）
-      ┌───────────────┤              ├─────────────────┐
-      ⇅               ⇅              ⇅                 ⇅
- readers/claude   readers/codex  readers/opencode   internal/hccli
- （transcript+     （rollout       （opencode api：    （hc CLI 封装：
-  /context /usage）  日志启发式）     会话/表单）        事件流/输入/屏幕/
-                                                       远端 exec --on）
-      ⇐—————— agent 自己的记录（各读各的，不装任何东西进 agent）——————⇐
-                                                       ⇅
-                                              hc (herdr-core) 终端
-                                               本机 + 连接的机器
+                         飞书（larkws 出站长连接：事件、卡片回调；无公网暴露）
+                           ⇅ 消息 · 卡片 · 按钮 · 回执 · 补收
+
+        ┌──────────────────────────────────────────────────────────────────
+        │ internal/chats/feishu
+        │ Chat 契约实现：卡片 schema 2.0、群/标签、
+        │ /auth 设备流、离线补收、限速
+        └──────────────────────────────┬───────────────────────────────────
+                                       │ chats.Chat 契约
+                                       │ internal/chats/chat.go
+                                       ⇅
+
+        ┌──────────────────────────────────────────────────────────────────
+        │ internal/engine（编排核心）
+        │  rooms      每 tab 一房间的生命周期
+        │  posting    发帖管线 / 活卡片 / 图片预上传
+        │  dialogs    对话框状态机（三通路 + 防陈旧）
+        │  intake     聊天侧输入（注入 / hook 回写）
+        │  overview   总览（去抖原地编辑）
+        │  - 每终端一条串行车道（lane）保序
+        └──────────────────┬───────────────────────────────┬───────────────
+                           │                               │
+                 readers.Reader 契约                HC 契约（core.HC）
+                           │                               │
+          ┌────────────────┼────────────────┐              │
+          ⇅                ⇅               ⇅              ⇅
+   readers/claude    readers/codex    readers/opencode   internal/hccli
+   （transcript+      （rollout          （opencode api：   （hc CLI 封装：
+    /context /usage）   日志启发式）       会话/表单）         事件流/输入/屏幕/
+                                                             远端 exec --on）
+
+          ⇐──────────── agent 自己的记录（各读各的，不装任何东西进 agent）────────────⇐
+                                                              ⇅
+                                                    hc (herdr-core) 终端
+                                                     本机 + 连接的机器
 ```
 
 另一条旁路：`herdrchat hooks install` 把内嵌的 `ask.sh`（逐字节复刻上游）装进 Claude
@@ -202,7 +208,7 @@ engine 的 hc、readers、store、chat 全部注入，测试换成 `internal/fak
 | 路径 | 职责 | 关键文件 |
 |---|---|---|
 | `cmd/herdrchat/` | 进程级入口：装配 CLI、忽略 SIGPIPE、panic 记日志退出 1 | `main.go` |
-| `internal/cli/` | 全部子命令；依赖全注入（env/home/TTY/时钟/HC/服务），测试不碰真实环境 | `cli.go`（分发+usage）、`run.go`（bot 接线）、`setup.go`、`update.go`、`start.go`、`install.go`、`status.go`、`logs.go`、`pair.go`、`initcmd.go`、`hookscmd.go`；内嵌 `config.env.example` |
+| `internal/cli/` | 全部子命令；依赖全注入（env/home/TTY/时钟/HC/服务），测试不碰真实环境 | `cli.go`（分发+usage）、`run.go`（bot 接线）、`setup.go`、`update.go`、`start.go`、`install.go`、`status.go`、`logs.go`、`pair.go`、`initcmd.go`、`hookscmd.go` |
 | `internal/engine/` | 引擎：对每个聊天平台、每个 agent 都一样的编排 | `engine.go`（起停/事件接线/定时器）、`rooms.go`、`posting.go`、`dialogs.go`、`intake.go`、`overview.go`、`pairing.go`、`commands.go`（/commands 目录）、`clean.go`、`update.go`（新版提示） |
 | `internal/core/` | 纯类型与算法（无副作用） | `types.go`、`errors.go`（错误分类学）、`lanes.go`、`cursor.go`、`menu.go`（屏幕菜单解析）、`views.go`（多视图拓扑）、`meter.go`、`hc.go`（HC 契约） |
 | `internal/chats/` | 聊天平台插件缝 | `chat.go` |
@@ -238,7 +244,7 @@ engine 的 hc、readers、store、chat 全部注入，测试换成 `internal/fak
    `var _ chats.Chat = (*Chat)(nil)`），API 调用集中在旁边的 `sdk.go`，启动时过
    `CheckChat`；
 3. 给出 `Requires`（config.env 必填键），接进 `internal/cli` 的 `ready()`；
-4. 平台的键补进内嵌 `config.env.example`；
+4. 平台的键补进根目录的 `config.env.example`；
 5. 测试：`CheckChat` + 自有消息格式转换；
 6. 加 `skills/herdrchat/references/<app>.md`（后台配置步骤）；
 7. 用独立 profile 跑（`--profile <app>` + `HERDRCHAT_CHAT=<app>`），不碰在跑的 bot。
