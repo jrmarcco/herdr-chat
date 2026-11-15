@@ -76,42 +76,16 @@ var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 func xmlText(s string) string { return xmlEscaper.Replace(s) }
 
 // LaunchdPlist 生成 launchd agent 的 plist：全路径、登录即起、崩溃自回。
+// 骨架在 launchd.plist.tmpl；这里只准备数据（转义由模板的 xml 函数做）。
 func LaunchdPlist(label string, s Spec) string {
-	var b strings.Builder
-	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>` + xmlText(label) + `</string>
-  <key>ProgramArguments</key>
-  <array>
-`)
-	for _, arg := range append([]string{s.Bin}, s.Args...) {
-		b.WriteString("    <string>" + xmlText(arg) + "</string>\n")
-	}
-	b.WriteString(`  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>ThrottleInterval</key>
-  <integer>` + strconv.Itoa(throttleSeconds) + `</integer>
-  <key>EnvironmentVariables</key>
-  <dict>
-`)
+	env := make([]kv, 0, len(s.Env))
 	for _, k := range sortedKeys(s.Env) {
-		b.WriteString("    <key>" + xmlText(k) + "</key>\n    <string>" + xmlText(s.Env[k]) + "</string>\n")
+		env = append(env, kv{Key: k, Value: s.Env[k]})
 	}
-	b.WriteString(`  </dict>
-  <key>StandardOutPath</key>
-  <string>` + xmlText(s.Out) + `</string>
-  <key>StandardErrorPath</key>
-  <string>` + xmlText(s.Out) + `</string>
-</dict>
-</plist>
-`)
-	return b.String()
+	return render("launchd.plist.tmpl", plistData{
+		Label: label, Args: append([]string{s.Bin}, s.Args...),
+		Throttle: throttleSeconds, Env: env, Out: s.Out,
+	})
 }
 
 // unitQuote 按 systemd 的规矩给一个词加引号：反斜杠与引号转义，% 是它的
@@ -124,23 +98,21 @@ func unitQuote(s string) string {
 }
 
 // SystemdUnit 生成 systemd user unit：总是重启，路径与变量都加引号。
+// 骨架在 systemd.unit.tmpl；引号与 $ 转义在这里做齐，模板只管排布。
 func SystemdUnit(s Spec) string {
 	words := make([]string, 0, len(s.Args)+1)
 	for _, arg := range append([]string{s.Bin}, s.Args...) {
 		// ExecStart 里 $ 会被当成变量展开。
 		words = append(words, strings.ReplaceAll(unitQuote(arg), "$", "$$"))
 	}
-	var b strings.Builder
-	b.WriteString("[Unit]\nDescription=herdrchat (" + s.ID + ")\n\n[Service]\n")
-	b.WriteString("ExecStart=" + strings.Join(words, " ") + "\n")
+	env := make([]string, 0, len(s.Env))
 	for _, k := range sortedKeys(s.Env) {
-		b.WriteString("Environment=" + unitQuote(k+"="+s.Env[k]) + "\n")
+		env = append(env, unitQuote(k+"="+s.Env[k]))
 	}
-	if s.Out != "" {
-		b.WriteString("StandardOutput=append:" + s.Out + "\nStandardError=append:" + s.Out + "\n")
-	}
-	b.WriteString("Restart=always\nRestartSec=" + strconv.Itoa(restartSeconds) + "\n\n[Install]\nWantedBy=default.target\n")
-	return b.String()
+	return render("systemd.unit.tmpl", unitData{
+		ID: s.ID, ExecStart: strings.Join(words, " "),
+		Env: env, Out: s.Out, Restart: restartSeconds,
+	})
 }
 
 // Runner 跑一条系统命令 ( launchctl / systemctl )，返回它的输出。测试替换它。

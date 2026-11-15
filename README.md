@@ -220,7 +220,7 @@ engine 的 hc、readers、store、chat 全部注入，测试换成 `internal/fak
 | `internal/hccli/` | hc CLI 封装：每次调用带超时、剥 `HC_TERMINAL_*`、16MB 上限；事件流跟随（10MB 缓冲）；能力探测 | `hc.go`、`events.go`、`home.go`、`capability.go` |
 | `internal/asks/` | hook 的 asks 协议（req/ans 文件、标签、stray 认领） | — |
 | `internal/hooks/` | `herdrchat hooks`：ask.sh 内嵌逐字节；只动带标记的条目；备份/原子写 | — |
-| `internal/service/` | launchd/systemd 用户服务生成与控制；env 白名单 | — |
+| `internal/service/` | launchd/systemd 用户服务生成与控制；env 白名单 | `service.go`、`templates.go`（嵌入 `templates/` 下的 plist/unit 模板） |
 | `internal/config/` | profile 布局（XDG/HERDRCHAT_HOME）、config.env 解析与逐行改写 | — |
 | `internal/state/` | state.json schema 兼容、原子写、损坏备份 | — |
 | `internal/cliversion/` | goreleaser `-X` 注入的版本变量 + 点分比较 | — |

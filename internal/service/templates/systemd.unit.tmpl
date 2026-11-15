@@ -1,0 +1,17 @@
+[Unit]
+Description=herdrchat ({{ .ID }})
+
+[Service]
+ExecStart={{ .ExecStart }}
+{{- range .Env }}
+Environment={{ . }}
+{{- end }}
+{{- if .Out }}
+StandardOutput=append:{{ .Out }}
+StandardError=append:{{ .Out }}
+{{- end }}
+Restart=always
+RestartSec={{ .Restart }}
+
+[Install]
+WantedBy=default.target

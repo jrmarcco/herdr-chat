@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ .Label | xml }}</string>
+  <key>ProgramArguments</key>
+  <array>
+{{- range .Args }}
+    <string>{{ . | xml }}</string>
+{{- end }}
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>{{ .Throttle }}</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+{{- range .Env }}
+    <key>{{ .Key | xml }}</key>
+    <string>{{ .Value | xml }}</string>
+{{- end }}
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{ .Out | xml }}</string>
+  <key>StandardErrorPath</key>
+  <string>{{ .Out | xml }}</string>
+</dict>
+</plist>

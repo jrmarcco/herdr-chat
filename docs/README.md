@@ -229,7 +229,7 @@ One Go module, ~22k lines; the only runtime dependency is the official Feishu SD
 | `internal/hccli/` | the hc CLI wrapper: a deadline on every call, `HC_TERMINAL_*` stripped, 16MB cap; the event-stream follower (10MB buffer); capability probe | `hc.go`, `events.go`, `home.go`, `capability.go` |
 | `internal/asks/` | the hook's asks protocol (req/ans files, the label, stray claims) | — |
 | `internal/hooks/` | `herdrchat hooks`: ask.sh embedded byte-for-byte; touches only marked entries; backup + atomic writes | — |
-| `internal/service/` | launchd/systemd user service; env whitelist | — |
+| `internal/service/` | launchd/systemd user service; env whitelist | `service.go`, `templates.go` (embeds the plist/unit skeletons in `templates/`) |
 | `internal/config/` | profile placement (XDG/HERDRCHAT_HOME), config.env parsing and line-wise edits | — |
 | `internal/state/` | state.json, schema-compatible shapes, atomic writes, corrupt-file backup | — |
 | `internal/cliversion/` | the one version variable goreleaser stamps via `-X` | — |
