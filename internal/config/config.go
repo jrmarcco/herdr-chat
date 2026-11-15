@@ -260,11 +260,15 @@ type Config struct {
 	AppID       string
 	AppSecret   string
 	OwnerOpenID string
-	Muted       Spaces
-	Silent      Spaces
-	BotTags     bool
-	UserTags    bool
-	History     map[string]bool
+	// EncryptKey / VerificationToken 是飞书应用「事件与回调 → 加密策略」页的两个值，
+	// 可选：不填长连接照常工作；填了，事件若带密文 ( encrypt 字段 ) SDK 会自动解密。
+	EncryptKey        string
+	VerificationToken string
+	Muted             Spaces
+	Silent            Spaces
+	BotTags           bool
+	UserTags          bool
+	History           map[string]bool
 }
 
 // Load 把 config.env 与环境变量合并 ( 环境变量优先，同 shell )，
@@ -315,20 +319,22 @@ func Load(file string, env map[string]string, requires []string) (Config, error)
 		return Config{}, err
 	}
 	return Config{
-		Profile:     "",
-		ConfigFile:  file,
-		Chat:        orDefault(merged["HERDRCHAT_CHAT"], "feishu"),
-		Env:         merged,
-		Sessions:    sessions,
-		SessionsSet: sessionsSet,
-		AppID:       merged["FEISHU_APP_ID"],
-		AppSecret:   merged["FEISHU_APP_SECRET"],
-		OwnerOpenID: merged["FEISHU_OWNER_OPEN_ID"],
-		Muted:       SpacesOf(muted, true, "all"),
-		Silent:      SpacesOf(silent, true, ""),
-		BotTags:     OnOff(merged["HERDR_BOT_TAGS"], true),
-		UserTags:    OnOff(merged["HERDR_USER_TAGS"], true),
-		History:     parts,
+		Profile:           "",
+		ConfigFile:        file,
+		Chat:              orDefault(merged["HERDRCHAT_CHAT"], "feishu"),
+		Env:               merged,
+		Sessions:          sessions,
+		SessionsSet:       sessionsSet,
+		AppID:             merged["FEISHU_APP_ID"],
+		AppSecret:         merged["FEISHU_APP_SECRET"],
+		OwnerOpenID:       merged["FEISHU_OWNER_OPEN_ID"],
+		EncryptKey:        merged["FEISHU_ENCRYPT_KEY"],
+		VerificationToken: merged["FEISHU_VERIFICATION_TOKEN"],
+		Muted:             SpacesOf(muted, true, "all"),
+		Silent:            SpacesOf(silent, true, ""),
+		BotTags:           OnOff(merged["HERDR_BOT_TAGS"], true),
+		UserTags:          OnOff(merged["HERDR_USER_TAGS"], true),
+		History:           parts,
 	}, nil
 }
 

@@ -95,6 +95,11 @@ Both must use the long connection (长连接), which needs the bot running.
   `card.action.trigger` (not the old `card.action.trigger_v1`, which cannot use the long
   connection) -> 添加. Without it, a click on a dialog button fails with error 200340.
 - Publish a version afterwards.
+- The 加密策略 page (Encrypt Key, Verification Token) is optional with the long
+  connection: the connection is authenticated as it is built. If the team's policy has
+  them set anyway, copy both into `config.env` (`FEISHU_ENCRYPT_KEY`,
+  `FEISHU_VERIFICATION_TOKEN`) and the bot decrypts what arrives encrypted; leaving them
+  empty changes nothing.
 
 ### Publish a version
 

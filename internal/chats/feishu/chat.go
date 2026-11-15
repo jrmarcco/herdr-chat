@@ -61,6 +61,12 @@ type Chat struct {
 	OwnerOpenID string // 空：还没配对，不建任何房间
 	Profile     string
 
+	// EncryptKey / VerificationToken 是应用「事件与回调 → 加密策略」页的两个值，可选。
+	// 长连接本身在建连时已鉴权，不填照常工作；填了，带密文的事件 ( encrypt 字段 )
+	// 由 SDK 的分发器自动解密 ( AES-256-CBC，密钥为 Encrypt Key 的 SHA-256 )。
+	EncryptKey        string
+	VerificationToken string
+
 	// Store 是 state.json。
 	Store state.Store
 
@@ -209,9 +215,10 @@ func (c *Chat) Start(ctx context.Context, h chats.Handlers) error {
 		xlog.For("feishu").Info("owner 未设置：配对之前不建任何房间")
 	}
 
-	// 事件分发 ( 长连接 )。
+	// 事件分发 ( 长连接 )。加密策略配了 Encrypt Key 时，密文事件在这里被解密
+	// ( 未配置则两个值为空串，行为与从前一致 )。
 	// 三个入口都留一行探针日志：事件到没到，一眼可见。
-	d := dispatcher.NewEventDispatcher("", "").
+	d := dispatcher.NewEventDispatcher(c.VerificationToken, c.EncryptKey).
 		OnP2MessageReceiveV1(func(_ context.Context, event *larkim.P2MessageReceiveV1) error {
 			xlog.For("feishu").Info("事件：收到消息")
 			c.takeMessage(ctx, messageReceiveToMap(event))

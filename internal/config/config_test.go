@@ -268,4 +268,28 @@ func sameParts(a, b map[string]bool) bool {
 	return true
 }
 
+// 加密策略的两个可选键：文件与环境各来一个，环境优先；不配置即空串。
+func TestLoadEncryptPolicy(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.env")
+	if err := os.WriteFile(file, []byte("FEISHU_ENCRYPT_KEY=from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(file, map[string]string{"FEISHU_VERIFICATION_TOKEN": "from-env", "FEISHU_ENCRYPT_KEY": "env-wins"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EncryptKey != "env-wins" || cfg.VerificationToken != "from-env" {
+		t.Errorf("encrypt policy keys: %+v", cfg)
+	}
+
+	cfg, err = Load(file, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.EncryptKey != "from-file" || cfg.VerificationToken != "" {
+		t.Errorf("encrypt policy defaults: %+v", cfg)
+	}
+}
+
 func sameStrings(a, b []string) bool { return slices.Equal(a, b) }

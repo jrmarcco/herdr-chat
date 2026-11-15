@@ -52,6 +52,7 @@ In the profile's `config.env` (`herdrchat status` prints where it is):
 | `HERDR_HISTORY` | `file,folded` | what a new room gets of the conversation before it: `file`, `folded`, both, or empty |
 | `FEISHU_APP_ID`, `FEISHU_APP_SECRET` | (required) | the Feishu app |
 | `FEISHU_OWNER_OPEN_ID` | (empty) | you; the bot tells you yours when you message it |
+| `FEISHU_ENCRYPT_KEY`, `FEISHU_VERIFICATION_TOKEN` | (empty) | optional, from the console's 事件与回调 → 加密策略 page. The long connection works without them; set them and events that arrive encrypted are decrypted |
 | `HERDR_BOT_TAGS` | `on` | the session or machine tag and `ended` next to a group's name |
 | `HERDR_USER_TAGS` | `on` | your sidebar labels, once `/auth` is done |
 
