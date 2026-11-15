@@ -254,8 +254,8 @@ browser, or tells you what to click without it; or follow the steps here yoursel
 1. Create a custom app (企业自建应用) and add the bot ability (机器人).
 2. Permissions: import the scopes listed in `skills/herdrchat/references/feishu.md`,
    "Scopes this bot uses" (there as JSON for the batch import): sending as the bot,
-   reading the messages sent to it, making and renaming groups, reactions, images both
-   ways, and group tags.
+   reading the messages sent to it, making, renaming and deleting groups, reactions,
+   images both ways, and group tags.
 3. `herdrchat init` prints where its `config.env` is. Fill in the app's App ID and App
    Secret (the app's 凭证与基础信息 page). `HERDR_SESSIONS` can stay empty for hc's
    default session (`ls ~/.local/state/herdr-core` lists yours).

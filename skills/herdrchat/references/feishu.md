@@ -154,6 +154,7 @@ Bot identity (the bot itself) and user identity (only for `/auth`, acting as the
       "im:resource",
       "im:chat:create",
       "im:chat:update",
+      "im:chat:delete",
       "im:tag:write",
       "im:biz_entity_tag_relation:write"
     ],
