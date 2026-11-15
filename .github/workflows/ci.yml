@@ -1,4 +1,8 @@
 # Go-only CI：lint ( 阻断档 ) + race 测试。发布在 release.yml ( goreleaser )。
+#
+# Lint 的版本成对固定：golangci-lint 用比其构建 Go 更新的工具链做分析会直接
+# typecheck 失败 ( exit 3，不是 findings )。golangci-lint v2.15.0 以 go1.27.3
+# 构建，所以 setup-go 钉 1.27.3；升级 golangci-lint 时把 go-version 一起动。
 name: ci
 
 on:
@@ -13,16 +17,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: "1.27.3"
       - name: Vet
         run: go vet ./...
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.15.0
           args: -c ./scripts/lint/.golangci.yaml
       - name: Test
         run: go test -race ./...
