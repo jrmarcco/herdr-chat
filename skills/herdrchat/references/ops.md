@@ -86,3 +86,42 @@ Read only the keys you need (a JSON tool such as `jq`, or grep for one key).
 | a group keeps an old name | its terminal is not live | it renames when the terminal is back |
 | a Feishu call fails with 400 in a burst | a rate limit (tags: 5 a second) | space the calls; the bot queues tag calls |
 | `herdrchat start` says it did not reach its chat app | wrong keys, or no network | `herdrchat logs --errors`; check the keys in `config.env` |
+
+## Reading an error
+
+The bot says errors the same way everywhere — in a chat card, in a log line, at the
+command line — so one table answers all of them. Find the text (or the part of it) and
+do what the row says; anything not in the table is an unknown error: get the full line
+with `herdrchat logs --errors` and treat it as a bug report, not a settings problem.
+
+| The bot says | It means | Do |
+|---|---|---|
+| "this terminal has ended" | the terminal finished its command; nothing accepts input anymore | nothing; its group keeps the history (`ended` tag) |
+| "hc cannot reach this terminal's machine; its room waits" | the machine behind an `@machine` terminal is offline or cut off | nothing on the bot side; the room resumes when the machine is back, it is not lost. `hc machine ls` says which link is down |
+| "the agent started a new conversation; following that one" | `/clear` or a resume: the old transcript's rest was posted, the new one is followed | nothing |
+| "the agent's own record cannot be read" | the agent's transcript/log file is missing or broken where the bot looked | `herdrchat logs` for the path it tried; check the agent still runs and its files are readable; if it repeats, capture the path and report it |
+| "two agent sessions look alike here; it cannot be told which one this terminal runs" | two sessions of the agent in one folder cannot be told apart | start one of them in another folder, or accept the screen-only view for that terminal |
+| "⚠ log match ambiguous" | Codex: the heuristic found more than one candidate log; a likelier one may exist | nothing fatal: what posts still comes from one log. If it mis-mirrors, restart that Codex in a folder of its own |
+| "herdrchat's hook is not on this machine; reading the screen instead" | a remote machine has herdrchat's hook missing, so dialogs are read off the screen | to get dialogs in the agent's own words there: install herdrchat on that machine and `herdrchat hooks install` there |
+| "this agent's conversation cannot be read; showing its screen" | the agent has no reader yet (pi, …); only its screen is mirrored | nothing to fix; typing gets the screen back |
+| "the dialog has moved on; the card was refreshed" | the card you tapped was no longer the dialog on screen; a fresh card shows the current one | tap on the new card |
+| "the bot does not know its owner yet" | no owner in `config.env` (fresh install) | `herdrchat pair` |
+| "the bot is not running yet" | a step that needs the bot (pairing) ran while it was down | `herdrchat start`, then the step again |
+
+## Capturing a screen sample
+
+The screen-menu parser (`hc read` output → dialog buttons) is locked down by real
+captures in `testdata/screens/`. When a dialog parses wrong (options missing, a wrong
+key, a preview frame confused with an option), capture the screen before anything else:
+
+```sh
+hc read <session>/<address> --lines 40 > testdata/screens/<agent>-<what-it-is>.txt
+```
+
+- capture it while the dialog is on screen (40 lines cover the menu; the test suite
+  parses every file in the folder, so a new capture gets a golden check for free);
+- name it after the agent and what it shows: `claude-permission-write.txt`,
+  `codex-plan-question.txt`;
+- reproduce with the corpus test (`go test ./internal/core -run TestScreenCorpus -v`)
+  and fix the parser against the capture; a CI golden failure is a behavior change
+  signal, not noise.

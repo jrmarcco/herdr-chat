@@ -1,0 +1,41 @@
+# THIRD-PARTY-NOTICES
+
+herdrchat (the Go rewrite) builds on the work of the projects below. What was taken
+from each, and where its license text lives.
+
+## zhangxiangliang/herdrchat — MIT
+
+The product this is a rewrite of: the behavior specification, the golden tests
+(transcribed to Go), the `ask.sh` hook script (`internal/hooks/ask.sh`, byte-identical)
+and the docs/skills lineage. A rewrite in Go with architecture fixes, behavior kept.
+
+- License (MIT), full text: `THIRD-PARTY/zhangxiangliang-herdrchat-LICENSE`
+- Upstream: https://github.com/zhangxiangliang/herdrchat
+
+## cobanov/herdrchat — Apache-2.0
+
+Knowledge-level borrowings, no code: the slash-command catalogue (which commands an
+agent really has on this machine), structured thread items with sub-agent/workflow
+cards, and the screen-fixture corpus pattern that locks the screen-menu parser down.
+`testdata/screens/` holds 28 screen captures taken from its test fixtures.
+
+- License (Apache-2.0), full text: `THIRD-PARTY/cobanov-herdrchat-LICENSE`
+- Its NOTICE file, retained as required: `THIRD-PARTY/cobanov-herdrchat-NOTICE`
+- Upstream: https://github.com/cobanov/herdrchat
+
+Copyright 2026 HerdrChat contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this
+software except in compliance with the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under
+the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied. See the License for the specific language governing
+permissions and limitations under the License.
+
+## Runtime dependency
+
+- `github.com/larksuite/oapi-sdk-go/v3` (the Feishu official Go SDK) — Apache-2.0,
+  linked at build time; its license ships with the module.

@@ -48,6 +48,10 @@ go install github.com/jrmarcco/herdr-chat/cmd/herdrchat@latest    # herdrchat �
 可选的 skill（教编程 agent 替你配置和照看 herdrchat）就在仓库里，链接给 agent
 即可，例如：`ln -s /path/to/herdr-chat/skills/herdrchat ~/.claude/skills/herdrchat`。
 
+从 npm（Node）版换过来？停掉旧的，把新二进制放到 `herdrchat` 命令的位置，
+`herdrchat start`：配置和状态原样接管，不用迁移——细节见
+[指南](docs/guide.md#migrating-from-the-node-version)（英文）。
+
 ## 配置
 
 **让 agent 帮你：** 对它说 `/herdrchat setup`。它会一步步带你配好，

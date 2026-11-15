@@ -58,6 +58,11 @@ The optional skill (teaches your coding agent to set herdrchat up and look after
 you) lives in the repo beside this file; link it for your agent, for example:
 `ln -s /path/to/herdr-chat/skills/herdrchat ~/.claude/skills/herdrchat`.
 
+Coming from the npm (Node) version? Stop the old one, put this binary where the
+`herdrchat` command is, `herdrchat start`: it takes over the same settings and state,
+nothing is migrated — the [guide](docs/guide.md#migrating-from-the-node-version) has
+the details.
+
 ## Set up
 
 **With your agent:** ask it `/herdrchat setup`. It walks you

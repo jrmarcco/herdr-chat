@@ -274,6 +274,30 @@ browser, or tells you what to click without it; or follow the steps here yoursel
    "The bot menu").
 9. Once it works: `herdrchat install` (see "Running as a service").
 
+## Migrating from the Node version
+
+The Go build takes over from the Node (npm) one in place: nothing is migrated, because
+nothing changes. `config.env`, `state.json`, the asks folders and the hook
+(`~/.local/share/herdrchat/hooks/ask.sh`, byte-identical, no need to reinstall
+`herdrchat hooks`) are read as they lie. `herdrchat.ask` labels and the asks protocol
+are the same, so a dialog asked while you switch is answered either way.
+
+1. Stop the old one: `herdrchat stop` with the old command (it ran in an hc terminal
+   and/or as a service; stop it in every form it has).
+2. Put the new binary where the `herdrchat` command is (a release tarball, or
+   `go install github.com/jrmarcco/herdr-chat/cmd/herdrchat@latest`); remove the npm
+   package (`npm rm -g herdrchat`) so the old command is not the one found first.
+3. `herdrchat start` — the same profile, groups, cursors and live cards continue
+   (`herdrchat install` instead, if it ran as a service: the service file is rewritten
+   to the new binary).
+
+`herdrchat start` stops every old instance of the profile first (an hc terminal named
+`herdrchat`, a running service), so running both at once does not happen by accident —
+two bots would answer twice.
+
+One difference: this build talks to Feishu only. A profile set to Telegram stays on the
+Node version until Telegram is implemented here.
+
 ## Running as a service
 
 `herdrchat start` runs the bot in an hc terminal, which ends when that hc core stops,

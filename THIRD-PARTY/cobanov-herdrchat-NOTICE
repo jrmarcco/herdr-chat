@@ -1,0 +1,52 @@
+HerdrChat
+Copyright 2026 HerdrChat contributors
+
+This product includes software developed by third parties, listed below with
+their licenses. Full license texts ship with each dependency in node_modules
+and in the resolved Swift/Gradle packages.
+
+Bundled at build time into the iOS app
+--------------------------------------
+Citadel (https://github.com/orlandos-nl/Citadel)                   MIT
+  and its dependencies:
+  SwiftNIO, SwiftNIO SSH, swift-crypto, swift-collections,
+  swift-atomics, swift-log, swift-system, swift-asn1               Apache-2.0
+  BigInt                                                           MIT
+SwiftTerm v1.18.0 (https://github.com/migueldeicaza/SwiftTerm)     MIT
+  Copyright (c) 2019-2026 Miguel de Icaza (https://github.com/migueldeicaza)
+  Copyright (c) 2017-2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)
+  Copyright (c) 2014-2016, SourceLair Private Company (https://www.sourcelair.com)
+  Copyright (c) 2012-2013, Christopher Jeffrey (https://github.com/chjj/)
+
+Bundled at build time into the Android app
+------------------------------------------
+sshj (https://github.com/hierynomus/sshj)                          Apache-2.0
+Bouncy Castle (bcprov-jdk18on, bcpkix-jdk18on)                      MIT
+net.i2p.crypto:eddsa                                               CC0-1.0
+SLF4J (slf4j-nop)                                                  MIT
+
+JavaScript / React Native
+-------------------------
+React Native, React                                                MIT
+Expo SDK and Expo Modules (expo-router, expo-glass-effect,
+  expo-sqlite, expo-secure-store, expo-symbols, expo-blur,
+  expo-haptics, expo-image, expo-constants)                        MIT
+react-native-reanimated, react-native-gesture-handler,
+  react-native-screens, react-native-safe-area-context             MIT
+@shopify/flash-list                                                MIT
+zustand                                                            MIT
+@tanstack/react-query                                              MIT
+
+Interoperates with (not bundled)
+--------------------------------
+herdr (https://herdr.dev) — reached over SSH on the user's own machine.
+Claude Code — its transcript files are read on the user's own machine.
+Neither is redistributed with this app.
+
+Served with the website (site/), not the app
+--------------------------------------------
+Recursive (https://github.com/arrowtype/recursive)                  OFL-1.1
+  Self-hosted in site/assets/fonts, subset to Latin; license text in
+  site/assets/fonts/OFL.txt.
+"Download on the App Store" badge                                   Apple
+  Apple's own artwork, used as Apple's marketing guidelines allow.

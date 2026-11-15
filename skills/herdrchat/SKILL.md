@@ -59,4 +59,5 @@ With no subcommand, run `herdrchat status` and suggest the next step from it.
 - `references/herdr.md`: what herdrchat is built on, and installing herdr with the user
   when hc is missing.
 - `references/ops.md`: running and checking the bot, its logs and state, the usual
-  problems, trying a Feishu API safely, committing without a leak.
+  problems, what each of the bot's errors means and what to do about it, capturing a
+  screen sample when a dialog parses wrong.
