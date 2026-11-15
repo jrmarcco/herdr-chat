@@ -1,12 +1,32 @@
-# macOS
+# --- IDE / 编辑器 ---
 .DS_Store
+.idea/
+.vscode/
+*.iml
+debug_bin*
 
-# Go
+# --- Go 构建产物 ---
+# 注意：go.sum / go.work.sum / go.work.lock 需要入库——不要加 *.sum / *.lock 这类模式，
+# 它们会把 Go 的锁文件与校验和一并忽略掉。
 /bin/
 /dist/
+*.exe
+*.test
+*.out
+coverage.*
 
-# 本地试验
+# --- 日志 ---
+*.log
+
+# --- 本地环境文件与密钥（不入库） ---
 *.local.env
+.env
+.env.*
+!.env.example
+*.pem
 
-# ZCode 会话产物
+# --- 临时目录 ---
+tmp/
+
+# --- 会话产物 ---
 .zcode/
