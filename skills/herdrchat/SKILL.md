@@ -24,7 +24,7 @@ it is missing, ask before installing it (a tarball from the repo's Releases, or
 `~/.config/herdrchat/<profile>/config.env` and its state in
 `~/.local/state/herdrchat/<profile>/`; `herdrchat status` prints both. Files named
 here (`config.env.example`, `docs/guide.md`) live in the repo beside this skill
-(`internal/cli/config.env.example`, `docs/`).
+(`config.env.example` at the repo root, `docs/`).
 
 ## Commands
 

@@ -217,7 +217,7 @@ One Go module, ~22k lines; the only runtime dependency is the official Feishu SD
 | Path | What it is | Key files |
 |---|---|---|
 | `cmd/herdrchat/` | process-level entry: assembles the CLI, ignores SIGPIPE, logs panics | `main.go` |
-| `internal/cli/` | every subcommand; all seams injected (env/home/TTY/clock/HC/service) so tests never touch the real machine | `cli.go` (dispatch+usage), `run.go` (the bot wiring), `setup.go`, `update.go`, `start.go`, `install.go`, `status.go`, `logs.go`, `pair.go`, `initcmd.go`, `hookscmd.go`; embeds `config.env.example` |
+| `internal/cli/` | every subcommand; all seams injected (env/home/TTY/clock/HC/service) so tests never touch the real machine | `cli.go` (dispatch+usage), `run.go` (the bot wiring), `setup.go`, `update.go`, `start.go`, `install.go`, `status.go`, `logs.go`, `pair.go`, `initcmd.go`, `hookscmd.go` |
 | `internal/engine/` | the engine: the same for every chat app and agent | `engine.go`, `rooms.go`, `posting.go`, `dialogs.go`, `intake.go`, `overview.go`, `pairing.go`, `commands.go`, `clean.go`, `update.go` |
 | `internal/core/` | pure types and algorithms | `types.go`, `errors.go` (error taxonomy), `lanes.go`, `cursor.go`, `menu.go` (screen-menu parsing), `views.go` (multi-view topology), `meter.go`, `hc.go` (the HC contract) |
 | `internal/chats/` | the chat-app seam | `chat.go` |
@@ -255,7 +255,7 @@ Everyday commands: `make lint` (the CI-blocking tier), `make lint-strict` (repor
    `chats.CheckChat` at startup;
 3. Give it a `Requires` list (the config.env keys it cannot start without) and use it in
    `internal/cli`'s `ready()`;
-4. Add its keys to the embedded `config.env.example`;
+4. Add its keys to the root `config.env.example`;
 5. Tests: `CheckChat`, plus its own message conversions;
 6. Add `skills/herdrchat/references/<app>.md` (the console steps);
 7. Run it in its own profile (`--profile <app>` with `HERDRCHAT_CHAT=<app>`), so the

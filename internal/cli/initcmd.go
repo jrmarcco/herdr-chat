@@ -2,15 +2,16 @@ package cli
 
 import (
 	"bytes"
-	_ "embed"
 	"os"
 	"strings"
 
+	"github.com/jrmarcco/herdr-chat"
 	"github.com/jrmarcco/herdr-chat/internal/config"
 )
 
-//go:embed config.env.example
-var configExample []byte
+// configExample 是起手的 config.env：正本在仓库根的 config.env.example，
+// 由根包 embed.go 嵌入（go:embed 够不到包目录外的文件）。
+var configExample = herdrchat.ConfigEnvExample
 
 // init 写一个起手的 config.env ( 已有就不动 )。
 func (a *App) cmdInit(args []string) int {
