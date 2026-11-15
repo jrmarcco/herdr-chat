@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jrmarcco/herdr-chat"
+	herdrchat "github.com/jrmarcco/herdr-chat"
 	"github.com/jrmarcco/herdr-chat/internal/config"
 )
 

@@ -76,7 +76,7 @@ var xmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 func xmlText(s string) string { return xmlEscaper.Replace(s) }
 
 // LaunchdPlist 生成 launchd agent 的 plist：全路径、登录即起、崩溃自回。
-// 骨架在 launchd.plist.tmpl；这里只准备数据（转义由模板的 xml 函数做）。
+// 骨架在 launchd.plist.tmpl；这里只准备数据 ( 转义由模板的 xml 函数做 )。
 func LaunchdPlist(label string, s Spec) string {
 	env := make([]kv, 0, len(s.Env))
 	for _, k := range sortedKeys(s.Env) {
@@ -88,8 +88,8 @@ func LaunchdPlist(label string, s Spec) string {
 	})
 }
 
-// unitQuote 按 systemd 的规矩给一个词加引号：反斜杠与引号转义，% 是它的
-// 说明符前缀，要写成 %%。
+// unitQuote 按 systemd 的规矩给一个词加引号：反斜杠与引号转义，
+// % 是它的说明符前缀，要写成 %%。
 func unitQuote(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
@@ -115,13 +115,16 @@ func SystemdUnit(s Spec) string {
 	})
 }
 
-// Runner 跑一条系统命令 ( launchctl / systemctl )，返回它的输出。测试替换它。
+// Runner 跑一条系统命令 ( launchctl / systemctl )，返回它的输出。
+// 测试替换它。
 type Runner func(ctx context.Context, name string, args ...string) (string, error)
 
 func realRunner(parent context.Context, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(parent, callTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec // G204: 命令是固定的 launchctl/systemctl，参数由本包拼出
+
+	//nolint:gosec // G204: 命令是固定的 launchctl/systemctl，参数由本包拼出。
+	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
 	text := strings.TrimSpace(string(out))
 	if err != nil {
 		if text == "" {
@@ -282,7 +285,7 @@ func (s *Service) Running(ctx context.Context) (pid int, running bool) {
 
 // pidIn 从 "<prefix><digits>" 的一行里读出 pid。
 func pidIn(text, prefix string) int {
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
 			if n, err := strconv.Atoi(strings.TrimSpace(rest)); err == nil {
 				return n
