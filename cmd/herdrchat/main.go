@@ -1,87 +1,97 @@
-// Command herdrchat 是 bot 的 CLI：每个子命令 ( setup、pair、start… ) 随各自的
-// 里程碑到来；目前它报出版本并客气地拒绝其余，让二进制从第一天起就存在、
-// `go install` 有东西可跑。
+// Command herdrchat 是 bot 的 CLI：每个子命令的实现在 internal/cli。
+// 这里只做进程级的事：忽略 SIGPIPE ( 管道断了就安静地走 )、装配 App、
+// 把 panic 带栈记进日志再退出 1。
 package main
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
+	"strings"
+	"syscall"
 
+	"github.com/jrmarcco/herdr-chat/internal/cli"
+	"github.com/jrmarcco/herdr-chat/internal/cliversion"
+	"github.com/jrmarcco/herdr-chat/internal/hccli"
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-const usage = `herdrchat — see and answer every hc terminal from Feishu or Telegram
-
-usage: herdrchat <command> [options]
-
-commands:
-  setup      set a profile up: the chat app, its keys, the sessions, the first start
-  pair       hand the bot to its owner with a 6-digit code
-  init       write a starter config.env
-  start      start the bot (a service, or a terminal that keeps it up)
-  stop       stop it
-  status     say whether it runs, and what is wrong if anything
-  logs       its log, --errors for the problems
-  install    keep it running as a system service
-  uninstall  remove the service
-  hooks      show, install or remove the PermissionRequest hook
-  run        run the engine in the foreground
-  version    say which herdrchat this is
-
-options:
-  --profile <name>   another setup beside the default (default: default)`
-
+// version：发布构建由 goreleaser 经 ldflags 写进 cliversion.Version；
+// 本地构建退回 build info ( go install 带 module 版本 )，再退回 "dev"。
 func version() string {
+	if !cliversion.Dev() {
+		return cliversion.Version
+	}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		if v := info.Main.Version; v != "" && v != "(devel)" {
 			return v
 		}
 	}
-	return "dev"
-}
-
-// notYet 是对里程碑尚未落地的子命令的诚实回答：如实说明，而不是假装。
-func notYet(cmd, milestone string) int {
-	fmt.Fprintf(os.Stderr, "herdrchat %s: not implemented yet (lands with %s)\n", cmd, milestone)
-	return 1
+	return cliversion.Version
 }
 
 func main() {
-	cleanupLog := xlog.Setup()
-	defer cleanupLog()
-	// panic 在进程退出前带栈记入日志；服务或终端循环会把它重新拉起
-	// ( 崩溃时的 owner 卡片属于 M2 的活 )。
-	defer func() {
-		if p := recover(); p != nil {
-			xlog.For("main").Error("panic 崩溃", "panic", p, "stack", string(debug.Stack()))
-			cleanupLog()
-			os.Exit(1)
-		}
-	}()
+	signal.Ignore(syscall.SIGPIPE)
 
-	args := os.Args[1:]
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
+	// CLI 层的日志 ( run 子命令会换成按天落盘的那套 )。
+	slog.SetDefault(slog.New(xlog.NewConsoleHandler(os.Stderr, xlog.ParseLevel(os.Getenv("GOAW_LOG_LEVEL")), false)))
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
 	}
-	cmd, rest := args[0], args[1:]
-	_ = rest
-	var code int
-	switch cmd {
-	case "version":
-		fmt.Println("herdrchat " + version())
-	case "--help", "-h", "help":
-		fmt.Println(usage)
-	case "run":
-		code = notYet(cmd, "M2: the engine")
-	case "setup":
-		code = notYet(cmd, "M7: the CLI")
-	case "pair", "init", "start", "stop", "status", "logs", "install", "uninstall", "hooks", "update":
-		code = notYet(cmd, "M7: the CLI")
-	default:
-		fmt.Fprintf(os.Stderr, "herdrchat: unknown command %q\n\n%s\n", cmd, usage)
-		code = 2
+	bin, err := os.Executable()
+	if err != nil {
+		bin = os.Args[0]
+	} else if resolved, rerr := filepath.EvalSymlinks(bin); rerr == nil {
+		bin = resolved
 	}
-	os.Exit(code)
+
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			env[k] = v
+		}
+	}
+
+	app := &cli.App{
+		Env:      env,
+		Home:     home,
+		Stdin:    os.Stdin,
+		Stdout:   cli.PipeSafe(os.Stdout, func() { os.Exit(0) }),
+		Stderr:   os.Stderr,
+		TTY:      isTTY(os.Stdin),
+		Bin:      bin,
+		Platform: runtime.GOOS,
+		Version:  version(),
+		HC:       hccli.New(),
+	}
+
+	code := func() (code int) {
+		defer func() {
+			if p := recover(); p != nil {
+				fmt.Fprintf(os.Stderr, "herdrchat: panic: %v\n%s\n", p, debug.Stack())
+				xlog.For("main").Error("panic 崩溃", "panic", p, "stack", string(debug.Stack()))
+				os.Exit(1)
+			}
+		}()
+		return app.Run(os.Args[1:])
+	}
+	os.Exit(code())
+}
+
+// isTTY 老老实实问终端本身：
+// stty 只在一个真 tty 的 stdin 上成功 —— /dev/null ( 也是字符设备 )，
+// ModeCharDevice 分不出来它。
+// stty 不在就退而求其次。
+func isTTY(f *os.File) bool {
+	cmd := exec.CommandContext(context.Background(), "stty", "-a")
+	cmd.Stdin = f
+	return cmd.Run() == nil
 }

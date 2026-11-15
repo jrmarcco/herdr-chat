@@ -41,7 +41,8 @@ var _ slog.Handler = (*ConsoleHandler)(nil)
 
 // ConsoleHandler 渲染单行紧凑日志:
 //
-//	15:04:05.000 INFO  engine    运行开始 session=s1 workspace=/ws
+//	15:04:05.000 INFO  engine    运行开始
+//	session=s1 workspace=/ws
 //
 // 整行拼装完成后一次写入; color 控制是否输出 ANSI 着色 ( 终端实例开、文件实例关 )。
 type ConsoleHandler struct {

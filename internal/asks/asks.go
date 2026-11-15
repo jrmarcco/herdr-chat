@@ -1,3 +1,16 @@
+// Package asks 实现 hook 的 asks 协议。
+// ask.sh 逐字节复用 ( 正本内嵌在 internal/hooks )，
+// 由 `herdrchat hooks install` 装进 Claude Code 与Codex 的设置。
+//
+// hook 把请求留在 agent 所在机器的 ~/.local/state/herdrchat/asks/req/<id>.json，
+// 形如 {agent, terminal, at, request} ( request 是 agent 给 hook 的原话 )，
+// 并在等待期间给它的终端打上 herdrchat.ask=<id> 标签。
+//
+// 答案写进 ans/<id>.json：hook 把它作为自己的决定打印；
+// 空文件即无决定 ( agent 改在终端里问 )。
+// id 是 "<秒>-<hook 的 pid>"：
+//
+// hook 已死的请求不再算数。
 package asks
 
 import (
@@ -13,17 +26,6 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/core"
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
-
-// Package asks 实现 hook 的 asks 协议 ( spec §8，移植自原版 lib/core/asks.mjs；ask.sh 逐字节
-// 复用在 assets/hooks/ask.sh，由 `herdrchat hooks install` 装进 Claude Code 与
-// Codex 的设置——安装器属 M7 )。
-//
-// hook 把请求留在 agent 所在机器的
-// ~/.local/state/herdrchat/asks/req/<id>.json，形如 {agent, terminal, at, request}
-// ( request 是 agent 给 hook 的原话 )，并在等待期间给它的终端打上
-// herdrchat.ask=<id> 标签。答案写进 ans/<id>.json：hook 把它作为自己的决定打印；
-// 空文件即无决定 ( agent 改在终端里问 )。id 是 "<秒>-<hook 的 pid>"：
-// hook 已死的请求不再算数。
 
 const (
 	// AsksDir 是 asks 协议的目录 ( 相对 home )。
@@ -66,13 +68,14 @@ type Ask struct {
 	Request  json.RawMessage
 }
 
-// Asks 是 hook 协议在引擎侧的全部状态：hook 在场缓存、每请求的部分答案、
-// 已答完的请求。远端机器的读写走 hc exec，本机直接文件与 sh。
+// Asks 是 hook 协议在引擎侧的全部状态：
+// hook 在场缓存、每请求的部分答案、已答完的请求。
+// 远端机器的读写走 hc exec，本机直接文件与 sh。
 type Asks struct {
 	hc      core.HC
 	homeDir string // 本机分支的 home ( 测试注入 )
+	mu      sync.Mutex
 
-	mu       sync.Mutex
 	hookSeen map[string]hookSeenAt
 	partials map[string]map[string]string
 	finished map[string]bool
@@ -94,8 +97,8 @@ func New(hc core.HC, homeDir string) *Asks {
 	}
 }
 
-// hookThere 问 hook 在不在那台机器 ( 一分钟缓存 )：不在就没有请求来，
-// 对话框立刻改为读屏。
+// hookThere 问 hook 在不在那台机器 ( 一分钟缓存 )：
+// 不在就没有请求来，对话框立刻改为读屏。
 func (a *Asks) hookThere(ctx context.Context, session, machine string) bool {
 	a.mu.Lock()
 	seen, ok := a.hookSeen[machine]
@@ -111,8 +114,8 @@ func (a *Asks) hookThere(ctx context.Context, session, machine string) bool {
 	return there
 }
 
-// PartialOf 给出一条请求到目前为止答了什么 ( Claude 的 AskUserQuestion 一次
-// 问几题：一张卡一题，全部有答案才作决定 )。
+// PartialOf 给出一条请求到目前为止答了什么
+// ( Claude 的 AskUserQuestion 一次问几题：一张卡一题，全部有答案才作决定 )。
 func (a *Asks) PartialOf(id string) map[string]string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -125,8 +128,8 @@ func (a *Asks) isFinished(id string) bool {
 	return a.finished[id]
 }
 
-// OpenAsk 是 agent 的终端正在等的请求；nil 没等；false ( known=false ) 表示
-// hook 不在那台机器上。
+// OpenAsk 是 agent 的终端正在等的请求；nil 没等；
+// false ( known=false ) 表示 hook 不在那台机器上。
 func (a *Asks) OpenAsk(ctx context.Context, session, address, agent string) (ask *Ask, known bool) {
 	machine := hccli.MachineOf(address)
 	term, err := a.hc.GetTerminal(ctx, session, address)
@@ -175,8 +178,9 @@ func (a *Asks) AsksHere() bool {
 	return false
 }
 
-// StrayAsk 是机器上没指名终端的、属于 agent 的请求 ( Codex 经共享后台服务把
-// hook 跑在终端之外时如此 )；nil 没有匹配的。
+// StrayAsk 是机器上没指名终端的、属于 agent 的请求
+// ( Codex 经共享后台服务把hook 跑在终端之外时如此 )；
+// nil 没有匹配的。
 func (a *Asks) StrayAsk(ctx context.Context, session, machine, agent string) *Ask {
 	script := "cd " + shellQuote(AsksDir+"/req") + " 2>/dev/null && for f in *.json; do [ -f \"$f\" ] || continue; id=\"${f%.json}\"; kill -0 \"${id#*-}\" 2>/dev/null || continue; printf '%s\\t' \"$id\"; tr -d '\\n' < \"$f\"; echo; done"
 	out, _ := a.hc.HomeShell(ctx, session, machine, script)
@@ -214,7 +218,8 @@ func (a *Asks) write(ctx context.Context, session, machine, id, decision string)
 	return strings.TrimSpace(out) == "written"
 }
 
-// Decide 给出一条请求对一次点击的决定：{Decision} ( hook 的输出，空串为无 )、
+// Decide 给出一条请求对一次点击的决定：
+// {Decision} ( hook 的输出，空串为无 )、
 // {Partial} ( 多题之一已答：记下，先不发 ) 或 nil ( 不是它的答案 )。
 type Decide func(ask *Ask, shown core.Dialog, reply core.Reply, partial map[string]string) *Decision
 
@@ -224,8 +229,8 @@ type Decision struct {
 	Partial  map[string]string
 }
 
-// AnswerAsk 回答 shown ( 由请求 shown.Ref 做出的卡 ) 的问题。true 表示送出了
-// ( 或记下了部分答案 )。
+// AnswerAsk 回答 shown ( 由请求 shown.Ref 做出的卡 ) 的问题。
+// true 表示送出了 ( 或记下了部分答案 )。
 func (a *Asks) AnswerAsk(ctx context.Context, session, address, agent string, shown *core.Dialog, reply core.Reply, decide Decide) bool {
 	ask, known := a.OpenAsk(ctx, session, address, agent)
 	if !known || ask == nil {
@@ -266,8 +271,12 @@ type Ref struct {
 	Raw *core.AgentDialog
 }
 
-// DecisionJSON 是 hook 输出的决定格式：allow ( {updatedInput, updatedPermissions} )
-// 或 deny ( {message, interrupt} )，Claude Code 与 Codex 的 PermissionRequest 都这么收。
+// DecisionJSON 是 hook 输出的决定格式：
+// allow ( {updatedInput, updatedPermissions} )
+// 或
+// deny ( {message, interrupt} )，
+//
+// Claude Code 与 Codex 的 PermissionRequest 都这么收。
 func DecisionJSON(decision map[string]any) string {
 	out, err := json.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{

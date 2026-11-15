@@ -6,9 +6,8 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
 
-// 转录自原版 test/views.test.mjs：同一终端的多个视角归一、跟随者归属、
-// 顺序无关、断连移交、拓扑未知的回退。
-
+// 视图归一行为测试：
+// 同一终端的多个视角归一、跟随者归属、顺序无关、断连移交、拓扑未知的回退。
 const (
 	sessMain = "main"
 	coreA    = "core-a"
@@ -34,6 +33,7 @@ func testCores() map[string]CoreInfo {
 
 func ownsOf(t *testing.T, v *CoreViews, session, address string, want bool) {
 	t.Helper()
+
 	got, known := v.Owns(session, address)
 	if !known || got != want {
 		t.Errorf("Owns(%s, %s) = %v (known=%v), want %v", session, address, got, known, want)
@@ -42,6 +42,7 @@ func ownsOf(t *testing.T, v *CoreViews, session, address string, want bool) {
 
 func TestViewIdentityAndOwnership(t *testing.T) {
 	v := CoreViewsOf([]string{sessMain, "a", "b"}, testCores())
+
 	// 从别的 session 看到的终端，只在其自己的 session 被跟随。
 	if v.Identity("a", "t37") != v.Identity(sessMain, "box-a/t37") {
 		t.Errorf("同一终端的身份必须跨视角一致")
@@ -71,6 +72,7 @@ func TestSessionOrderDoesNotMatterForOwn(t *testing.T) {
 	// HERDR_SESSIONS 的顺序不影响一个自身被跟随的 session。
 	v := CoreViewsOf([]string{sessMain, "a", "b"}, testCores())
 	w := CoreViewsOf([]string{"a", "b", sessMain}, testCores())
+
 	for _, x := range []*CoreViews{v, w} {
 		ownsOf(t, x, "a", "t37", true)
 		ownsOf(t, x, "main", "box-a/t37", false)

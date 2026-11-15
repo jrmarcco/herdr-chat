@@ -12,9 +12,8 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
-// 引擎行为测试 ( 对应原版 engine.test.mjs 的核心场景 )，全部跑在 Fake 三件套
-// 上：快照建房间与回填、活卡片与终答、切卡、deliver 重试、遗言与接管、
-// endGone、入口命令。
+// 引擎核心场景的行为测试，全部跑在 Fake 三件套上：
+// 快照建房间与回填、活卡片与终答、切卡、deliver 重试、遗言与接管、endGone、入口命令。
 
 // term 构造一条终端记录 ( live、带 where 与 tab 标签、agent 空闲中 )。
 func term(address string) map[string]any {
@@ -42,22 +41,26 @@ func harness(t *testing.T) *rig {
 	t.Helper()
 	chat := fake.NewFakeChat()
 	hc := fake.NewFakeHC()
+
 	hc.Terminals["t1"] = term("t1")
 	reader := fake.NewFakeReader()
 	reg := readers.NewRegistry()
 	if err := reg.Register(reader); err != nil {
 		t.Fatal(err)
 	}
+
 	store := &state.MemStore{}
 	e := New(chat, hc, reg, store, []string{sessDefault})
 	home := t.TempDir()
 	e.HomeDir = home
 	e.SetAsksHome(home)
 	e.Quick = true
+	e.ManualTimers = true
 	e.StartedAt = time.Now().Add(-time.Hour) // 回填条目不算 "未来"
 	reader.SetAfterFn(func(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error) {
 		return &core.Reading{File: logFile}, nil
 	})
+
 	t.Cleanup(e.Stop)
 	return &rig{e: e, chat: chat, hc: hc, reader: reader, store: store}
 }
@@ -82,7 +85,9 @@ func (r *rig) waitFor(t *testing.T, what string, ok func() bool) {
 	t.Fatalf("等待超时: %s ( calls=%v )", what, r.chat.Counts())
 }
 
-func (r *rig) countCalls(name string) int { return r.chat.Counts()[name] }
+func (r *rig) countCalls(name string) int {
+	return r.chat.Counts()[name]
+}
 
 func (r *rig) postsContaining(part string) []fake.Call {
 	var out []fake.Call
@@ -90,7 +95,8 @@ func (r *rig) postsContaining(part string) []fake.Call {
 		if len(c.Args) < 2 {
 			continue
 		}
-		// Post: Args=[room, markdown]；PostCard/EditCard: Args=[.., title, markdown]。
+		// Post: Args=[room, markdown]；
+		// PostCard/EditCard: Args=[.., title, markdown]。
 		for _, arg := range c.Args[1:] {
 			if md, _ := arg.(string); strings.Contains(md, part) {
 				out = append(out, c)
@@ -101,8 +107,8 @@ func (r *rig) postsContaining(part string) []fake.Call {
 	return out
 }
 
-// say 换 reader 的增量剧本 ( 按游标契约过滤：只有游标之后、未 seen 的才算新，
-// 这本来就是 reader 的职责，剧本要演得像 )。
+// say 换 reader 的增量剧本
+// ( 按游标契约过滤：只有游标之后、未 seen 的才算新，这本来就是 reader 的职责，剧本要演得像 )。
 func (r *rig) say(items ...core.Item) {
 	r.reader.SetAfterFn(func(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error) {
 		until, _ := time.Parse(time.RFC3339, cur.At)
@@ -137,13 +143,14 @@ func (r *rig) roomMessage(text string) {
 }
 
 func (r *rig) direct(text string) {
-	r.chat.Handlers.OnMessage(core.Incoming{Where: core.Where{Message: "d0"}, Message: "d0", Text: text})
+	r.chat.Handlers.OnMessage(core.Incoming{Where: core.Where{Message: directMsg}, Message: directMsg, Text: text})
 }
 
 func TestSnapshotMakesRoomWithBackfill(t *testing.T) {
 	r := harness(t)
 	r.reader.SetAfterFn(func(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error) {
-		if cur.At == "0000-00-00T00:00:00.000Z" { // 回填：从头读
+		if cur.At == "0000-00-00T00:00:00.000Z" {
+			// 回填：从头读。
 			return &core.Reading{File: logFile, Items: []core.Item{
 				{Role: core.RoleYou, Text: "fix it", At: r.e.StartedAt.Add(-time.Minute), ID: "u1"},
 				{Role: core.RoleAI, Text: "done", At: r.e.StartedAt.Add(-30 * time.Second), ID: idA1},
@@ -151,10 +158,12 @@ func TestSnapshotMakesRoomWithBackfill(t *testing.T) {
 		}
 		return &core.Reading{File: logFile}, nil
 	})
+
 	r.start(t)
 	r.waitFor(t, "回填文件 + 折叠帖", func() bool {
 		return r.countCalls("PostFile") == 1 && r.countCalls("PostFolded") == 1
 	})
+
 	st, _ := r.store.Read()
 	room, ok := st.Chats["default|t1"]
 	if !ok || room.Chat == "" || room.Tab != tabKey || room.Name != "api / claude" {
@@ -171,6 +180,7 @@ func TestLiveCardThenFinalAnswer(t *testing.T) {
 	r.setWorking()
 	r.e.liveTick()
 	r.waitFor(t, "活卡片", func() bool { return len(r.postsContaining("thinking aloud")) > 0 })
+
 	st, _ := r.store.Read()
 	if st.Cursors["default|t1"].Live == nil {
 		t.Fatalf("游标缺活卡片: %+v", st.Cursors)
@@ -221,7 +231,8 @@ func TestLiveCardOverflowSplits(t *testing.T) {
 
 func TestDeliverRetriesPost(t *testing.T) {
 	r := harness(t)
-	r.chat.FailPost = 2 // 前两次失败
+	// 前两次失败。
+	r.chat.FailPost = 2
 	r.start(t)
 	r.say(core.Item{Role: core.RoleAI, Text: "after retries", At: time.Now(), ID: idA1, End: true})
 	r.hc.Turn(sessDefault, "t1", "done")
@@ -258,6 +269,7 @@ func TestPostEndLastWordsAndAdoption(t *testing.T) {
 	r.hc.Change(sessDefault, keyLabels, "t2", map[string]any{
 		"labels": map[string]any{"where": "api / claude", "herdr.space": spaceID, "herdr.tab": tabKey},
 	})
+
 	r.waitFor(t, "接管通知", func() bool { return len(r.postsContaining("new terminal now (t2)")) > 0 })
 	st, _ := r.store.Read()
 	if _, old := st.Chats["default|t1"]; old {
@@ -276,6 +288,7 @@ func TestEndGoneMarksRoomsOfMissingTerminals(t *testing.T) {
 	r.start(t)
 	r.hc.RemoveTerminal("t1")
 	r.e.endGone()
+
 	r.waitFor(t, "endGone 标记结束", func() bool {
 		st, _ := r.store.Read()
 		return st.Chats["default|t1"].Ended
@@ -302,6 +315,7 @@ func TestRoomMessageTypesIntoTerminal(t *testing.T) {
 		core.Item{Role: core.RoleYou, Text: "hello there", At: time.Now(), ID: "u1"},
 		core.Item{Role: core.RoleAI, Text: "hi from agent", At: time.Now(), ID: idA1, End: true},
 	)
+
 	r.hc.Turn(sessDefault, "t1", "done")
 	r.waitFor(t, "ai 的回应", func() bool { return len(r.postsContaining("hi from agent")) > 0 })
 	for _, c := range r.chat.Calls() {
@@ -334,7 +348,7 @@ func TestDirectCommands(t *testing.T) {
 	r.direct("anything")
 	r.waitFor(t, "帮助文本", func() bool {
 		for _, c := range r.chat.Calls() {
-			if c.Name == "Reply" && len(c.Args) >= 2 {
+			if c.Name == callReply && len(c.Args) >= 2 {
 				if md, _ := c.Args[1].(string); strings.Contains(md, "/new <session>") {
 					return true
 				}
@@ -348,7 +362,7 @@ func TestRestartContinuesSameLiveCard(t *testing.T) {
 	r := harness(t)
 	r.start(t)
 
-	// 一段工作中的内容 → 活卡片 m1。
+	// 一段工作中的内容 → 活卡片。
 	r.say(core.Item{Role: core.RoleAI, Text: "part one", At: time.Now(), ID: idA1})
 	r.setWorking()
 	r.e.liveTick()
@@ -363,12 +377,14 @@ func TestRestartContinuesSameLiveCard(t *testing.T) {
 	r.e.Stop()
 	r2 := New(r.chat, r.hc, r.e.Readers, r.store, []string{sessDefault})
 	r2.Quick = true
+	r2.ManualTimers = true
 	r2.StartedAt = time.Now().Add(-time.Hour)
 	t.Cleanup(r2.Stop)
 	r.say(core.Item{Role: core.RoleAI, Text: "part two", At: time.Now(), ID: idA2})
 	if err := r2.Start(context.Background(), func() {}); err != nil {
 		t.Fatal(err)
 	}
+
 	r.setWorking()
 	r2.liveTick()
 	deadline := time.Now().Add(3 * time.Second)

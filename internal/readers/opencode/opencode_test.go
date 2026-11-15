@@ -7,7 +7,6 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/core"
 )
 
-// 重复字面量收拢为常量 ( goconst )。
 const (
 	modelGLM  = "glm-4.7"
 	provZhipu = "zhipuai"

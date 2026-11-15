@@ -10,7 +10,6 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/core"
 )
 
-// 重复字面量收拢为常量 ( goconst )。
 const (
 	kText    = "text"
 	kTs      = "timestamp"

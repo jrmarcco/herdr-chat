@@ -1,0 +1,28 @@
+# Go-only CI：lint ( 阻断档 ) + race 测试。发布在 release.yml ( goreleaser )。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: -c ./scripts/lint/.golangci.yaml
+      - name: Test
+        run: go test -race ./...

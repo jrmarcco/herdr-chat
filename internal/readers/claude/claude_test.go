@@ -25,7 +25,6 @@ const (
 	narrationWord = "narration"
 )
 
-// 重复字面量收拢为常量 ( goconst )。
 const (
 	kTimestamp = "timestamp"
 	kContent   = "content"
@@ -45,15 +44,14 @@ const (
 	msgStaging = "also staging"
 )
 
-// 转录自原版 test/readers.test.mjs：顺序与过滤、narration、工具行、你的回答、
-// 图片、模型与上下文、窗口与限额；加上 Task 子代理卡 ( FINAL_PLAN §2.B )。
-
+// 行为测试：
+// 顺序与过滤、narration、工具行、你的回答、图片、模型与上下文、窗口与限额；
+// 加上 Task 子代理卡。
 func at(seconds int) string {
 	return time.Date(2026, 11, 12, 0, 0, seconds, 0, time.UTC).Format("2006-01-02T15:04:05.000Z")
 }
 
 func entry(t *testing.T, o map[string]any) string {
-	t.Helper()
 	t.Helper()
 	raw, err := json.Marshal(o)
 	if err != nil {
@@ -306,7 +304,7 @@ func TestContextWindowAndLimitsFromClaudeItself(t *testing.T) {
 }
 
 func TestTaskToolCallBecomesSubagentCard(t *testing.T) {
-	// FINAL_PLAN §2.B：把活儿交给子代理，会话里单独成卡。
+	// B：把活儿交给子代理，会话里单独成卡。
 	lines := []string{
 		entry(t, map[string]any{kType: kAssistant, kUUID: "t", kTimestamp: at(10), kMessage: map[string]any{kStop: kToolUse, kContent: []any{
 			map[string]any{kType: kToolUse, kName: "Task", kInput: map[string]any{

@@ -8,9 +8,8 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
-// 转录自原版 test/cursor.test.mjs：切行跳过与稳定 id、同时间戳晚写不丢、
+// 游标行为测试：切行跳过与稳定 id、同时间戳晚写不丢、
 // 晚写旧时间戳只发一次、tail 不够触发全量读、seen 只在 lag 之外遗忘。
-
 // 最简单的一种日志：每条一个条目，带它的文本。
 func at(seconds int) string {
 	return time.Date(2026, 11, 12, 0, 0, seconds, 0, time.UTC).Format(isoLayout)
@@ -71,7 +70,7 @@ func TestLateWriteWithOlderTimestampPostedOnce(t *testing.T) {
 }
 
 func TestTailShortOfCursorAsksForWholeFile(t *testing.T) {
-	// tail 够不到游标之前时，complete=false，调用方须整文件重读。
+	// tail 够不到游标之前时，complete = false，调用方须整文件重读。
 	cur := StartCursor(at(5))
 	if _, complete := afterLines(t, []string{line(20, "x", "a1")}, cur); complete {
 		t.Errorf("tail 不够必须报 incomplete")

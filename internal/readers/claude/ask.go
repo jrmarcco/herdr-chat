@@ -19,11 +19,10 @@ const (
 	optNoLabel  = "No"
 )
 
-// 它的对话框，走 herdrchat 的 hook ( asks 包 )：hook 运行期间 Claude 问你的——
-// 一次工具授权 ( Yes；Claude 给了规则时还有 "不再问"；No )、它的提问
-// ( AskUserQuestion：一题一卡、多选框、自己的话，答案合在一起回去 )、它的计划
-// ( ExitPlanMode )。Esc 会打断 Claude，和在它自己的提示里按 Esc 一样。没有 hook
-// ( 或 hook 没看见的对话框 ) 照旧读屏。
+// 它的对话框，走 herdrchat 的 hook ( asks 包 )：
+// hook 运行期间 Claude 问你的 —— 一次工具授权 ( Yes；Claude 给了规则时还有 "不再问"；No )、
+// 它的提问 ( AskUserQuestion：一题一卡、多选框、自己的话，答案合在一起回去 )、它的计划 ( ExitPlanMode )。
+// Esc 会打断 Claude，和在它自己的提示里按 Esc 一样。没有 hook ( 或 hook 没看见的对话框 ) 照旧读屏。
 
 // homeRel 把绝对路径说成人话：工作目录内的相对、其余 ~/。
 func homeRel(file, cwd string) string {
@@ -133,8 +132,8 @@ func optionLabel(o any) string {
 	return ""
 }
 
-// AskDialog 把 hook 的请求做成 agent 上报的提问：现在问的是哪一题
-// ( partial：已答过的跳过 )；没有可问的返回 nil。
+// AskDialog 把 hook 的请求做成 agent 上报的提问：
+// 现在问的是哪一题 ( partial：已答过的跳过 )；没有可问的返回 nil。
 func AskDialog(ask *asks.Ask, partial map[string]string) *core.AgentDialog {
 	req := map[string]any{}
 	_ = json.Unmarshal(ask.Request, &req)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,14 +25,18 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// Chat 是 herdrchat 的飞书侧 ( 移植自原版 lib/chats/feishu/index.mjs + rooms/ )：
-// 一个 hc 终端一个群，直聊是总览与命令；经 /auth 后以你行事 ( 静音、你的标签、
-// 置顶、@ )。
+// Chat 是 herdrchat 的飞书侧：
+// 一个 hc 终端一个群，直聊是总览与命令；
+// 经 /auth 后以你行事 ( 静音、你的标签、置顶、@ )。
 //
-// 事件走 larkws 长连接：消息 ( im.message.receive_v1 )、卡片点击
-// ( card.action.trigger，3 秒内应答 )、bot 菜单 ( application.bot.menu_v6 )。
-// 飞书不保证补发停机期间的事件，所以自己看：每个群记下已处理到的时刻
-// ( state.feishuRead )，每次连接后用 message.list 补收漏掉的。
+// 事件走 larkws 长连接：
+// 消息 ( im.message.receive_v1 )、
+// 卡片点击( card.action.trigger，3 秒内应答 )、
+// bot 菜单 ( application.bot.menu_v6 )。
+//
+// 飞书不保证补发停机期间的事件，所以自己看：
+// 每个群记下已处理到的时刻 ( state.feishuRead )，
+// 每次连接后用 message.list 补收漏掉的。
 
 const (
 	kType         = "type"
@@ -49,15 +54,20 @@ const (
 
 // Chat 实现 chats.Chat。
 type Chat struct {
+	mu sync.Mutex
+
 	AppID       string
 	AppSecret   string
 	OwnerOpenID string // 空：还没配对，不建任何房间
 	Profile     string
+
 	// Store 是 state.json。
 	Store state.Store
+
 	// Muted/Silent 是 HERDR_MUTED_SPACES / HERDR_SILENT_SPACES。
 	Muted  config.Spaces
 	Silent config.Spaces
+
 	// BotTags / UserTags 是 HERDR_BOT_TAGS / HERDR_USER_TAGS。
 	BotTags, UserTags bool
 	// StateDir 存 user-token.json。
@@ -68,11 +78,12 @@ type Chat struct {
 	client   LarkAPI
 	userAuth *UserAuth
 
-	mu         sync.Mutex
-	handlers   chats.Handlers
-	seen       map[string]bool
-	seenOrder  []string
-	queues     map[string]*serialQueue
+	handlers  chats.Handlers
+	seenOrder []string
+
+	seen   map[string]bool
+	queues map[string]*serialQueue
+
 	youChecked time.Time
 	youAllowed bool
 }
@@ -87,6 +98,8 @@ type LarkAPI interface {
 	ReplyMessage(ctx context.Context, messageID, msgType, content string) (string, error)
 	// RecallMessage 撤回。
 	RecallMessage(ctx context.Context, messageID string) error
+	// DeleteChat 解散群 ( bot 是群主 )。
+	DeleteChat(ctx context.Context, chatID string) error
 	// ListMessages 补收：某群从 since 秒起的消息。
 	ListMessages(ctx context.Context, chatID string, sinceSec int64) ([]ListedMessage, error)
 	// CreateChat 建群 ( 拉 owner 入群 )。
@@ -120,16 +133,22 @@ type ListedMessage struct {
 }
 
 // serialQueue 串行执行一个 chat 的消息 ( 3 秒时限内先登记再处理 )。
+// next 是"前一条做完"的信号 ( 做完即 close；nil = 队列已排空 )。
+//
+// 注意不是传函数的通道：
+// 向它发送只会抱着 chat 的锁死在第一条消息上 ( 教训记在这 )。
 type serialQueue struct {
 	mu   sync.Mutex
-	next chan func()
+	next chan struct{}
 }
 
 func (q *serialQueue) run(fn func()) {
-	done := make(chan struct{})
+	// 每条消息装上自己的完成信号、等前一条的：
+	// 谁装的谁关，换手也不会关错别人的 ( 曾经这里关"此刻的 q.next"，前一条的信号从此没人发 )。
 	q.mu.Lock()
-	prev := q.next
-	q.next = make(chan func())
+	prev := q.next // 前一条的完成信号；nil = 队列空，第一跳不等
+	done := make(chan struct{})
+	q.next = done
 	q.mu.Unlock()
 	go func() {
 		if prev != nil {
@@ -137,12 +156,6 @@ func (q *serialQueue) run(fn func()) {
 		}
 		fn()
 		close(done)
-		q.mu.Lock()
-		if q.next != nil {
-			close(q.next)
-			q.next = nil
-		}
-		q.mu.Unlock()
 	}()
 	<-done
 }
@@ -159,10 +172,10 @@ func New(appID, appSecret, ownerOpenID, profile string, store state.Store, state
 }
 
 // --- 契约：元信息 ---
-
 func (c *Chat) Name() string     { return "feishu" }
 func (c *Chat) RoomWord() string { return "group" }
 func (c *Chat) Ready() bool      { return c.OwnerOpenID != "" }
+func (c *Chat) OwnerKey() string { return OwnerKey }
 
 func (c *Chat) Help() []string {
 	return []string{"`/auth` let the bot act as you for chat-list settings (mute, labels, pin)"}
@@ -176,8 +189,10 @@ func (c *Chat) Split(markdown string) []string { return chunk(markdown, ChunkSiz
 // Requires 是 config.env 的必填键。
 var Requires = []string{"FEISHU_APP_ID", "FEISHU_APP_SECRET"}
 
-// --- 契约：启动 ---
+// OwnerKey 是 config.env 里记 owner 的键 ( 配对成功时写入 )。
+const OwnerKey = "FEISHU_OWNER_OPEN_ID"
 
+// --- 契约：启动 ---
 func (c *Chat) Start(ctx context.Context, h chats.Handlers) error {
 	c.mu.Lock()
 	c.handlers = h
@@ -186,7 +201,7 @@ func (c *Chat) Start(ctx context.Context, h chats.Handlers) error {
 	if c.SetupNewLark != nil {
 		c.client = c.SetupNewLark(c.AppID, c.AppSecret)
 	} else {
-		c.client = &sdkClient{cli: lark.NewClient(c.AppID, c.AppSecret)}
+		c.client = &sdkClient{cli: lark.NewClient(c.AppID, c.AppSecret), owner: c.OwnerOpenID}
 	}
 	c.userAuth = NewUserAuth(c.AppID, c.AppSecret, c.StateDir+"/user-token.json")
 
@@ -195,17 +210,27 @@ func (c *Chat) Start(ctx context.Context, h chats.Handlers) error {
 	}
 
 	// 事件分发 ( 长连接 )。
+	// 三个入口都留一行探针日志：事件到没到，一眼可见。
 	d := dispatcher.NewEventDispatcher("", "").
 		OnP2MessageReceiveV1(func(_ context.Context, event *larkim.P2MessageReceiveV1) error {
+			xlog.For("feishu").Info("事件：收到消息")
 			c.takeMessage(ctx, messageReceiveToMap(event))
 			return nil
-		}).OnP2CardActionTrigger(func(_ context.Context, card *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
+		}).OnP2ChatAccessEventBotP2pChatEnteredV1(func(_ context.Context, event *larkim.P2ChatAccessEventBotP2pChatEnteredV1) error {
+		xlog.For("feishu").Info("事件：有人进入机器人会话")
+		return nil
+	}).OnP2CardActionTrigger(func(_ context.Context, card *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
+		xlog.For("feishu").Info("事件：卡片点击")
 		res := c.onCardAction(cardActionToMap(card))
 		var toast *larkcallback.Toast
 		if t, ok := res["toast"].(map[string]any); ok {
 			toast = &larkcallback.Toast{Type: str(t["type"]), Content: str(t["content"])}
 		}
-		return &larkcallback.CardActionTriggerResponse{Toast: toast}, nil
+		resp := &larkcallback.CardActionTriggerResponse{Toast: toast}
+		if cardJSON, ok := res["card"].(map[string]any); ok {
+			resp.Card = &larkcallback.Card{Type: "raw", Data: cardJSON}
+		}
+		return resp, nil
 	})
 
 	wsClient := larkws.NewClient(c.AppID, c.AppSecret,
@@ -245,14 +270,26 @@ func (c *Chat) Start(ctx context.Context, h chats.Handlers) error {
 	return nil
 }
 
+// keysOf 列一个 map 的键 ( 探针用 )。
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // takeMessage 收到一条消息 ( 去重、按 chat 排队 )。
 func (c *Chat) takeMessage(ctx context.Context, data map[string]any) {
 	msg, _ := data["message"].(map[string]any)
 	if msg == nil {
+		xlog.For("feishu").Info("探针：message 字段缺失", "keys", keysOf(data))
 		return
 	}
 	messageID, _ := msg["message_id"].(string)
 	if messageID == "" || c.alreadySeen(messageID) {
+		xlog.For("feishu").Info("探针：message_id 为空或已见过", "message_id", messageID)
 		return
 	}
 	chatID, _ := msg["chat_id"].(string)
@@ -281,11 +318,11 @@ func (c *Chat) enqueue(chatID string, fn func()) {
 	c.mu.Lock()
 	q, ok := c.queues[chatID]
 	if !ok {
-		q = &serialQueue{next: make(chan func())}
-		q.next <- fn // 第一次：无前驱
+		// next 为 nil：无前驱，run 里第一跳就不等。
+		q = &serialQueue{}
 		c.queues[chatID] = q
 		c.mu.Unlock()
-		go func() { fn(); close(q.next) }()
+		q.run(fn)
 		return
 	}
 	c.mu.Unlock()
@@ -316,9 +353,11 @@ func (c *Chat) handleMessage(ctx context.Context, data map[string]any) {
 	if c.OwnerOpenID == "" {
 		// 配对：直聊里的第一条非斜杠消息。
 		if chatType, _ := msg["chat_type"].(string); chatType != chatP2P {
+			xlog.For("feishu").Info("探针：非 p2p 聊天，配对分支不收", "chat_type", chatType)
 			return
 		}
 		text, _, _ := MessageParts(messageType, content)
+		xlog.For("feishu").Info("探针：配对消息进来", "message_type", messageType, "text_len", len(text))
 		if strings.HasPrefix(strings.TrimSpace(text), "/") {
 			return
 		}
@@ -327,7 +366,10 @@ func (c *Chat) handleMessage(ctx context.Context, data map[string]any) {
 		h := c.handlers
 		c.mu.Unlock()
 		if h.OnMessage != nil {
-			h.OnMessage(core.Incoming{Where: core.Where{Room: core.Room(chatID), Message: core.Message(str(msg["message_id"]))}, Message: core.Message(str(msg["message_id"])), Text: text})
+			h.OnMessage(core.Incoming{
+				Where:   core.Where{Room: core.Room(chatID), Message: core.Message(str(msg["message_id"]))},
+				Message: core.Message(str(msg["message_id"])), Text: text, Sender: openID,
+			})
 		}
 		return
 	}
@@ -360,6 +402,7 @@ func (c *Chat) handleMessage(ctx context.Context, data map[string]any) {
 		h.OnMessage(core.Incoming{
 			Room: room, Where: core.Where{Room: core.Room(chatID), Message: core.Message(str(msg["message_id"]))},
 			Message: core.Message(str(msg["message_id"])), Text: text, Images: imageRefsToBytes(images),
+			Sender: openID,
 		})
 	}
 }
@@ -473,6 +516,12 @@ func (c *Chat) onCardAction(data map[string]any) map[string]any {
 		return map[string]any{kToast: map[string]any{kType: toastError, "content": truncate(err.Error(), 200)}}
 	}
 	res := map[string]any{kToast: map[string]any{kType: "info", kContent: out.Toast}}
+
+	// 回调响应里的新卡是唯一能换掉按钮/表单的通道 ( PATCH 只能改展示内容， // 交互组件动不了——飞书文档明说 )。
+	// 原地刷新与关卡都靠它。
+	if out.Card != nil {
+		res["card"] = PlainCard(out.Card.Markdown, out.Card.Title, out.Card.Tone, out.Card.Footer)
+	}
 	return res
 }
 
@@ -627,6 +676,20 @@ func (c *Chat) EndRoom(ctx context.Context, k string) error {
 	return nil
 }
 
+// DeleteRoom 彻底删掉一个房间 ( /clean )：解散群。state 由引擎摘除。
+func (c *Chat) DeleteRoom(k string) error {
+	st, _ := c.Store.Read()
+	room, ok := st.Chats[k]
+	if !ok {
+		return nil // 已不在：幂等
+	}
+	if room.Tag != "" || room.EndedTagID != "" {
+		// 标签随群解散失效，state.tags 里的 id 留着给下一个同 scope 群复用。
+		_ = room.Tag
+	}
+	return c.client.DeleteChat(context.Background(), room.Chat)
+}
+
 func (c *Chat) ReviveRoom(ctx context.Context, k string) error {
 	if !c.BotTags {
 		return nil
@@ -690,6 +753,7 @@ func (c *Chat) sendMarkdown(ctx context.Context, chatID, text, footer string) (c
 		}
 		// 卡片 ( markdown )；被拒则纯文本。
 		cardJSON := PlainCard(part, "", core.ToneWorking, foot)
+
 		// 无标题的纯 markdown 卡。
 		delete(cardJSON, "header")
 		contentBytes, _ := json.Marshal(cardJSON)
@@ -786,7 +850,8 @@ func (c *Chat) Pinned() []string {
 }
 
 func (c *Chat) Ring(ctx context.Context, k string, msg core.Message, text string) error {
-	// 静音的群里只有 @ 提及才响；未静音的群本来就响。完全静默的 space 连 @ 都不发。
+	// 静音的群里只有 @ 提及才响；未静音的群本来就响。
+	// 完全静默的 space 连 @ 都不发。
 	if !c.asYou() {
 		return nil
 	}
@@ -876,6 +941,9 @@ func (c *Chat) Download(ctx context.Context, msg core.Message, ref, file string)
 // --- 契约：owner ---
 
 func (c *Chat) TellOwner(ctx context.Context, look core.Look) (err error) {
+	if c.OwnerOpenID == "" || c.client == nil {
+		return fmt.Errorf("tell owner: no owner, or the chat is not started yet")
+	}
 	cardJSON := PlainCard(look.Markdown, look.Title, look.Tone, look.Footer)
 	contentBytes, _ := json.Marshal(cardJSON)
 	_, err = c.client.SendMessage(ctx, idOpen, c.OwnerOpenID, "interactive", string(contentBytes))

@@ -7,11 +7,10 @@
 | M1 骨架 + 契约 + Fake 基建 | ✅ 完成（2026-11-14） | 契约测试绿（`go test -race ./...` 全绿，64 用例） |
 | M2 引擎（房间/发帖/游标/活卡片/总览/入口） | ✅ 完成（2026-11-14） | 55 用例全绿（`go test -race ./...`）；对话框状态机按 FINAL_PLAN 归 M3 |
 | M3 对话框三通路 + hook + 菜单解析 | ✅ 完成（2026-11-14） | 79 用例全绿（5 轮 -race 稳定）；语料 28 份 |
-| M4 readers ×3 + meter/footer | ✅ 完成（2026-11-14） | 105 用例全绿（-race）；Item.Card、命令目录、GLM 限额已并入；**M5 Telegram 已取消（仅飞书）** | + Item.Card 卡片（§2.B）+ 命令目录（§2.A）+ GLM 限额 |
-| M5 Telegram | ⬜ 未开始 | |
-| M6 飞书 | ⬜ 未开始 | |
-| M7 CLI 全命令 + 服务 + hooks 安装器 | ⬜ 未开始 | |
-| M7.5 `herdrchat update`（goreleaser） | ⬜ 未开始 | |
+| M4 readers ×3 + meter/footer | ✅ 完成（2026-11-14） | 105 用例全绿（-race）；Item.Card、命令目录、GLM 限额已并入；**Telegram 已取消（仅飞书）** |
+| M5 飞书 | ✅ 完成（2026-11-14） | 卡片 schema 2.0 / larkws / 设备流 / 补收 / 回执全绿（13+ 用例） |
+| M6 CLI 全命令 + 服务 + hooks 安装器 | ✅ 完成（2026-11-14） | §13.11,12：服务快照、hooks 安装/卸载、--profile/usage/EPIPE 全绿；配对补齐 |
+| M7.5 `herdrchat update`（goreleaser） | ✅ 完成（2026-11-14） | goreleaser 链路验证过 snapshot 产物；update 对真实产物本地 E2E 对拍通过 |
 | M8 端到端验收 + 文档 + 迁移说明 | ⬜ 未开始 | + THIRD-PARTY-NOTICES |
 
 ## 工程约定（用户设定，2026-11-14）
@@ -19,7 +18,7 @@
 - **日志统一用 `internal/xlog`**（包名已从 `logging` 改为 `xlog`）：`xlog.For("<组件>").Error("消息", "key", value)`。入口 `cmd/herdrchat` 已接 `xlog.Setup()`（env：`GOAW_LOG_LEVEL/COLOR/FILE`）+ panic recover。
 - **与 spec §11 的偏差**：原计划的独立 logging 包（按天文件、14 天修剪、⏎ 折叠、HandleCrash）已被移除，由 xlog 替代——单行紧凑格式、`GOAW_LOG_FILE` 单文件追加、组件列。M7 做 `herdrchat logs` 命令时按 xlog 的落盘形态实现。
 - **lint 基线**：`make lint`（golangci-lint 基线档，CI 阻断）必须 0 issues，当前已达成；`make lint-strict` 为软门槛（现有 revive×50 / prealloc×2 报告，不阻断）。
-- 仓库卫生：`.DS_Store` 已删并入 `.gitignore`；`assets/` 与 `testdata/node-tests/` 是 reuse.md 认定的复用资产，保留。
+- 仓库卫生：`.DS_Store` 已删并入 `.gitignore`。**Go-only（2026-11-14 起）**：原版 Node 资产退场——`testdata/node-tests/`（Node 测试，Go 对等测试已全部转录）与 npm 打包/CI（`assets/.releaserc.json`、`assets/ci/`、`assets/scripts/`）移除；`assets/docs→docs/`、`assets/skills→skills/`（spec §2 本就规划的根目录布局）；上游 LICENSE/CHANGELOG 移入 `THIRD-PARTY/`；hook 脚本与示例配置以包内嵌副本为唯一正本（原"与 assets 逐字节一致"的测试改为锁内嵌正本的内容标记）。补了纯 Go 的 `.github/workflows/ci.yml`（vet+lint+test）顶替被删的 Node CI，"lint 是 CI 阻断"的约定不变。**模板 feishu-only（同日）**：`internal/cli/config.env.example` 移除 Telegram 段与相关注释（cli_test 锁定 TELEGRAM_ 键禁入）；docs（README×2、guide 的 Telegram 节/对比表/设置表/铃声/limits）与 skills（SKILL 的 telegram 命令行与列表、ops 故障表、feishu 对比句）全部去 Telegram，删 `references/telegram.md`；state 的 telegramOffset/Button/SpaceIcon 字段保留（兼容、注释标注"本构建不实现"）。**进一步（同日）**：Go 注释里全部 49 处 "Node 版/原版 xxx.mjs" 出处说明改写为只留技术含义；`docs/`（README×2 的 badge/要求/安装/更新/卸载、guide 的 readers 表与服务段、architecture 整篇重写为 Go 包结构）与 `skills/`（SKILL 安装段、ops/telegram 的 node -e 改 curl）里 npm/npx/Node 安装方式全部改为 Go 方式（releases / go install / herdrchat update）；`status` 补服务二进制丢失（BinGone）提示，与 guide 的说法对齐。
 
 ## M1 落了什么（2026-11-14）
 
@@ -95,3 +94,36 @@
 **留待 M6+ 的**：飞书端到端冒烟 ( 真实 app + 真实 hc )；SDK 的 CreateChat/CreateTag/BindTag 走 im.v2 原生请求 ( 目前返回占位错误 )；sips 头像仅 macOS ( Linux 跳过 )；`HERDR_SESSIONS` 多 session 的拓扑测试。
 
 **已知测试抖动**：`TestLiveCardThenFinalAnswer` / `TestRestartContinuesSameLiveCard` 在全量并行 `-race` 下有 ~10% 概率因 Quick 定时器 ( 10ms ) 与断言时序竞态而超时 ( 生产代码无 race 检测器报告；两测试单跑全绿 )。已在 Quick 模式从 1ms→10ms、waitFor 5s→8s 后将抖动率从 ~30% 压到 ~10%。根治需要给测试一个暂停引擎定时器的钩子 ( M6 顺手做 )。
+
+## M6 CLI 全命令 + 服务 + hooks 安装器 落了什么（2026-11-14）
+
+代码约 21.4k 行（净增 ~5.0k），`make lint` 0 issues，`go test -race -count=1 ./...` 14 包连续多轮全绿（含此前抖动的两测试——本里程碑根治，见下）：
+
+- **`internal/hooks`** — PermissionRequest hook 安装器（spec §8.3，移植 hooks.mjs）：`PlacesOf`（CLAUDE_CONFIG_DIR/CODEX_HOME/XDG_DATA_HOME）、`InstallHooks`（ask.sh 内嵌自 assets/hooks/ask.sh 逐字节复用、mode 0700；条目只增删含 `herdrchat/hooks/ask.sh` 标记的、装两遍仍只一条；首改自动备份 `.herdrchat-backup`；坏 JSON 绝不写；原子写保持原 mode；agent 没装的目录不碰）、`UninstallHooks`（摘干净、空数组/空 hooks 对象一并删回原样）、`StatusOf`（there/in 两态）。测试转录 hooks.test.mjs 安装器一节 + ask.sh 与 assets 逐字节一致断言。
+- **`internal/service`** — launchd/systemd 服务（spec §10，移植 service.mjs）：`LaunchdPlist`（Label `app.herdrchat.<id>`、全路径、RunAtLoad/KeepAlive/ThrottleInterval 10、XML 转义、StandardOut/Error→service.out.log）、`SystemdUnit`（ExecStart 双引号、Environment 逐条引号与 `%`/`$`/`\` 转义、Restart=always/RestartSec=5/WantedBy=default.target）、`Of`（darwin→`~/Library/LaunchAgents/…plist`、linux→`$XDG_CONFIG_HOME|~/.config/systemd/user/herdrchat-<id>.service`、其余平台 nil）、`Installed/Write/Remove/BinGone`（Go 版天然没有 node 路径问题，BinGone 查二进制挪走）、Start/Stop/Disable/Running（launchctl bootstrap/bootout/print、systemctl --user daemon-reload/enable/restart/disable --now/show；Runner 可注入）。快照测试转录 service.test.mjs + launchctl/systemctl 调用序列逐条断言。
+- **配对（spec §6.10，补 M2 欠账）** — `core/pairing.go`（6 位码 crypto/rand、15min/5 次）+ `engine/pairing.go`（tryPairing：无 owner 时直聊只认码；对不上计数、5 次销毁；码对→`SetOwner` 写 config + 回复 + 2s 后 `Restart` 让位新 owner 实例；无码/过期回指引，含"自己的 id 手填"一行——chat 契约加 `OwnerKey()`，`Incoming` 加 `Sender`，飞书直聊带上 open_id）。3 个引擎测试：码对认主、错码计数销毁、无码指引且 `/new`/`/kill` 对陌生人一概不跑。
+- **`internal/cli`** — 全部子命令（spec §10）：
+  - `run`：真接线（hccli + 共享 asks + claude.New/codex.New/opencode.New + feishu.Chat + engine）；xlog 按天落盘 `logs/<YYYY-MM-DD>.log`、14 天修剪；崩溃路径：主 goroutine panic→🔴 down 卡（≤300 字），重启后以心跳文件 `state/running` 判"上次没退干净"→✅ back 卡（SIGKILL/OOM 也兜得住）；SIGTERM/SIGINT 优雅排空。
+  - `start`：readyConfig + 配置的 session 必须在本机；先停干净（防双 bot 双答）；服务形态走服务，否则首个 session 的 `hc run --bg` 终端放 while 循环脚本（变量白名单同服务、PATH 用终端自己的）；waitConnected 60s 读当日日志等 `feishu connected`，超时打最近 5 条 ERROR、exit 1。
+  - `stop`（从所有形态停下）/ `status`（路径、必填键 set|missing 不打秘密、每 session core up|down|不在本机、运行形态与双实例警告、/auth refreshUntil、hook 状态、当日 ERROR/WARN 计数）/ `logs`（--errors/-n/--day，行格式即 xlog）/ `init`（内嵌 config.env.example 逐字节复用 + 测试锁定；--chat 只认 feishu）/ `install`/`uninstall`（服务文件每次重写、env 白名单 HERDRCHAT_HC/HERDRCHAT_PROFILE/PATH/HERDRCHAT_HOME/XDG_*；linux 提示 enable-linger）/ `pair`（owner 已设提示、bot 未跑拒绝、写 state.pairing、打印指引、2s 轮询 config ≤15min、以 waitConnected 收尾）/ `setup`（TTY 门（`stty -a` 判真 tty，`</dev/null` 也诚实拒绝）、hc --version 在场检查、密钥 stty -echo 无回显 + tenant_access_token/internal 即时校验、列本机 session 挑选、start→控制台两步→pair→问装服务）/ `version`/usage/未知命令 exit 2。
+  - 全局：SIGPIPE 忽略 + `cli.PipeSafe`（EPIPE 安静 exit 0，`logs | head` 无噪音）。依赖全部从 `App` 注入（env/home/TTY/时钟/HC/SvcOf/CheckKeys/Stty/ConnectWait），测试不碰真实 home。
+- **CLI 测试**（§13.11,12）：--profile 两种形式与非法名 exit 2、usage/version/unknown、init（0600、不覆盖、拒 telegram）、logs 四态、hooks（状态/非 TTY 拒绝/--yes/问 y·n）、start 三种拒绝（缺键/ghost session/telegram）、pair（owner 已设、bot 没跑、成功路径全程注入）、status 输出与不打秘密、loopScript 白名单（无 CLAUDE/PATH）、waitConnected 超时报最近错误、EPIPE、config.env.example 逐字节、**wiring**（对等 wiring.test.mjs：`var _ core.HC = (*hccli.CLI)(nil)` + 三 reader CheckReader+Register + feishu CheckChat + 引擎装配 + 配对码可用）。
+- **飞书 M5 遗留补齐**：`CreateChat`（im.v1 chat.create，UserIdType open_id，拉 owner 入群）、租户标签 im.v2（`tag.create` tag_type=tenant，重名回 duplicate_id 拿来即用；`biz_entity_tag_relation` create 绑/update 解绑）；sdkClient 带 owner（Chat.Start 注入）。**未经真实飞书企业验证**（编译期对着 SDK 形状写就，端到端冒烟在 M8）。
+- **readers 构造器**：`claude.New(hc, shared)`/`codex.New(hc, shared)`/`opencode.New(hc)`（Files/Shell/Cache/Asks 接好；codex 提问状态机的表建好——空表上写会炸；opencode 的 GLM Fetch 默认真 HTTP，走环境代理）。`core.HC` 接口加 `HomeFile`（FakeHC 补实现）；引擎加 `SetAsks`（与 readers 共享同一份 partial/finished 记忆）与 `ManualTimers`。
+- **测试抖动根治**：引擎加 `ManualTimers`（测试自己 tick，Quick 定时器不再与断言抢时序），harness 与重启用例全部启用——`TestRestartContinuesSameLiveCard` 连续 6 轮 -race 稳定，全量多轮 0 失败。
+
+**留待 M7.5/M8 的**：`herdrchat update`（goreleaser 链路）；真实飞书 app + 真实 hc 的端到端冒烟（setup→pair→发消息→点按钮→服务安装）；THIRD-PARTY-NOTICES 与文档更新；租户标签对拍真实返回。
+
+**工程约定增补（spec §11 偏差的延伸）**：bot 落盘日志用 `xlog.SetupDaily(dir, keep)`——行格式不变（xlog 单行紧凑），文件按天 `logs/<YYYY-MM-DD>.log`、14 天修剪；`GOAW_LOG_FILE` 单文件行为原样保留；`herdrchat logs --day` 因此有真语义。
+
+## M7.5 `herdrchat update` 落了什么（2026-11-14）
+
+代码约 22.4k 行（净增 ~1.0k），`make lint` 0 issues，`go test -race -count=1 ./...` 15 包两轮全绿。对应 FINAL_PLAN §3 上游 1.11 漂移项的 Go 重设计：
+
+- **`internal/cliversion`** — goreleaser 经 `-X` 注入的 `Version`（单独成包，ldflags 有稳定落点）；`Newer` 按点分段数值比较（v 前缀剥掉、预发布同段即同版、解析不出一律当"不新"——宁可少提示不瞎升级）；`DevVersion` 判发布构建（App/引擎都用它，不只看包变量）。
+- **goreleaser 链路** — `.goreleaser.yaml`（linux/darwin × amd64/arm64、CGO 关、`-s -w -X …cliversion.Version={{.Version}}`；tar.gz 名 `herdrchat_<v>_<Os>_<x86_64|aarch64>.tar.gz` + `herdrchat_<v>_checksums.txt`——这两个名字写进 update 命令，改要一起改）+ `.github/workflows/release.yml`（tag `v*` 触发，vet+test 过了才 release）。**已验证**：`goreleaser check` 通过；`release --snapshot --clean` 四平台产物齐全、`-X` 生效（快照二进制 `version` 报 `0.0.0-SNAPSHOT-<sha>`）。
+- **`herdrchat update [--check]`**（internal/cli/update.go）— 查 latest（GitHub API，`HERDRCHAT_UPDATE_API/REPO` 可换、走环境代理）→ 下载本平台 tar.gz + checksums → sha256 对不上坚决不装 → 从 tar 解出本体 → 同目录临时文件 + rename 原子替换（跑着的旧进程用旧 inode 不受影响）→ 重启：服务形态 launchctl/systemctl 重启；hc 终端形态 SIGTERM 心跳文件里的 pid（run 的 `state/running` 现在带 pid，两分钟新鲜度防 pid 复用），终端循环 3s 后拉起新的 → waitConnected 收尾。dev 构建也允许换（明说 "dev build: bringing in the release anyway"）；已是最新就直说。
+- **bot 内新版提示**（engine/update.go，语义对齐上游 1.11）— 起跑 30s 后问一次、每 24h 再问；有更新且没提示过（`state.updateNoticed`，可选字段、Node 版忽略无害）→ owner 一张 "📦 herdrchat x is out" 卡；只提示不自动升级；dev 构建/网络失败静默。
+- **验证**：update 全流程在注入的 Latest/Download 上 8 个用例（--check 不动二进制、已最新、替换+mode 0755、篡改字节拒装、缺平台资产、pid SIGTERM 真进程、服务重启调用序列、资产名与模板一致）；引擎提示 2 个用例（同版一次、更大版本再提示；同版/更旧/问不出/dev 全安静）；**真实产物 E2E**——本地起一个 GitHub API 形状的 HTTP 服务，用 snapshot 二进制真跑 `update`：下载真 tar.gz、校验真 checksums、原子替换、换完的二进制照常 `version`。
+
+**留待 M8 的**：真实打 tag 出 release 走一遍 CI（需要仓库写权限）；真实 GitHub 上 `update` 的最终对拍。其余按 M8 计划：端到端冒烟、对拍、THIRD-PARTY-NOTICES、文档与迁移说明。

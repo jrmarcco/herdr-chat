@@ -29,20 +29,20 @@ func TestConsoleHandlerSingleLine(t *testing.T) {
 	logger.Info("运行开始", "session", "s1", "workspace", "/ws")
 	logger.Debug("不应出现")
 
-	line := buf.String()
-	if matched, err := regexp.MatchString(timeLineRegexp, line); err != nil || !matched {
-		t.Fatalf("行首应为毫秒时间戳，实际 %q", line)
+	line := buf.String
+	if matched, err := regexp.MatchString(timeLineRegexp, line()); err != nil || !matched {
+		t.Fatalf("行首应为毫秒时间戳，实际 %q", line())
 	}
-	if want := "INFO  engine     运行开始 session=s1 workspace=/ws"; !strings.Contains(line, want) {
-		t.Fatalf("应包含紧凑单行字段，实际 %q", line)
+	if want := "INFO  engine     运行开始 session=s1 workspace=/ws"; !strings.Contains(line(), want) {
+		t.Fatalf("应包含紧凑单行字段，实际 %q", line())
 	}
-	if strings.Count(line, "\n") != 1 {
-		t.Fatalf("应为单行输出，实际 %d 行", strings.Count(line, "\n"))
+	if strings.Count(line(), "\n") != 1 {
+		t.Fatalf("应为单行输出，实际 %d 行", strings.Count(line(), "\n"))
 	}
-	if strings.Contains(line, "不应出现") {
+	if strings.Contains(line(), "不应出现") {
 		t.Fatal("低于级别阈值的记录不应输出")
 	}
-	if strings.Contains(line, "\x1b[") {
+	if strings.Contains(line(), "\x1b[") {
 		t.Fatal("未开颜色时不应包含 ANSI 转义码")
 	}
 }
@@ -54,15 +54,15 @@ func TestConsoleHandlerColor(t *testing.T) {
 	logger := newTestLogger(&buf, slog.LevelInfo, true)
 	logger.Info("运行开始")
 
-	line := buf.String()
-	if !strings.Contains(line, ansiBlue+"INFO ") {
-		t.Fatalf("INFO 徽应着蓝色，实际 %q", line)
+	line := buf.String
+	if !strings.Contains(line(), ansiBlue+"INFO ") {
+		t.Fatalf("INFO 徽应着蓝色，实际 %q", line())
 	}
-	if !strings.Contains(line, ansiCyan+"engine") {
-		t.Fatalf("组件列应着青色，实际 %q", line)
+	if !strings.Contains(line(), ansiCyan+"engine") {
+		t.Fatalf("组件列应着青色，实际 %q", line())
 	}
-	if !strings.Contains(line, ansiReset) {
-		t.Fatalf("着色后应重置颜色，实际 %q", line)
+	if !strings.Contains(line(), ansiReset) {
+		t.Fatalf("着色后应重置颜色，实际 %q", line())
 	}
 }
 
@@ -73,12 +73,12 @@ func TestConsoleHandlerValueQuoting(t *testing.T) {
 	logger := newTestLogger(&buf, slog.LevelInfo, false)
 	logger.Error("失败", "error", errors.New("boom"), "reason", "包含 空格")
 
-	line := buf.String()
-	if !strings.Contains(line, "error=boom") {
-		t.Fatalf("error 值应渲染错误信息，实际 %q", line)
+	line := buf.String
+	if !strings.Contains(line(), "error=boom") {
+		t.Fatalf("error 值应渲染错误信息，实际 %q", line())
 	}
-	if !strings.Contains(line, `reason="包含 空格"`) {
-		t.Fatalf("含空白的值应加引号，实际 %q", line)
+	if !strings.Contains(line(), `reason="包含 空格"`) {
+		t.Fatalf("含空白的值应加引号，实际 %q", line())
 	}
 }
 
@@ -144,15 +144,15 @@ func TestForAttachesComponent(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	previous := slog.Default()
+	previous := slog.Default
 	t.Cleanup(func() {
-		slog.SetDefault(previous)
+		slog.SetDefault(previous())
 	})
 	slog.SetDefault(slog.New(NewConsoleHandler(&buf, slog.LevelInfo, false)))
 
 	For("approval").Warn("审核拒绝", "tool", "bash")
 
-	if line := buf.String(); !strings.Contains(line, "approval   审核拒绝 tool=bash") {
-		t.Fatalf("For 应注入组件列，实际 %q", line)
+	if line := buf.String; !strings.Contains(line(), "approval   审核拒绝 tool=bash") {
+		t.Fatalf("For 应注入组件列，实际 %q", line())
 	}
 }

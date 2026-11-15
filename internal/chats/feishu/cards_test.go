@@ -3,15 +3,17 @@ package feishu
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
+	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
-// 转录自原版 test/feishu.test.mjs 的卡片部分：chunk 的围栏切分、header 的
-// emoji 剥离与色调、menuCard 的按钮/表单、doneCard、折叠卡、tagName、
-// ticksOf、messageParts。
-
+// 飞书卡片行为测试：
+// chunk 的围栏切分、header 的emoji 剥离与色调、menuCard 的按钮/表单、
+// doneCard、折叠卡、tagName、ticksOf、messageParts。
 const (
 	menuKey = "k1"
 	optYes  = "Yes"
@@ -25,7 +27,7 @@ func TestChunkSplitsOnLines(t *testing.T) {
 	}
 	// 超长按行界切分。
 	var lines []string
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		lines = append(lines, strings.Repeat("x", 10))
 	}
 	parts := chunk(strings.Join(lines, "\n"), 100)
@@ -61,7 +63,8 @@ func TestChunkClosesAndReopensFence(t *testing.T) {
 	var kept []string
 	for i := 0; i < len(allLines); i++ {
 		if allLines[i] == "```" && i+1 < len(allLines) && strings.HasPrefix(allLines[i+1], "```") {
-			i++ // 闭合与重开相抵
+			// 闭合与重开相抵。
+			i++
 			continue
 		}
 		kept = append(kept, allLines[i])
@@ -71,8 +74,13 @@ func TestChunkClosesAndReopensFence(t *testing.T) {
 	}
 }
 
-func tail(s string, n int) string { return s[max(0, len(s)-n):] }
-func head(s string, n int) string { return s[:min(n, len(s))] }
+func tail(s string, n int) string {
+	return s[max(0, len(s)-n):]
+}
+
+func head(s string, n int) string {
+	return s[:min(n, len(s))]
+}
 
 func TestHeaderStripsEmojiAndUsesTone(t *testing.T) {
 	h := cardHeader("⌛️ Working…", core.ToneWorking)
@@ -305,5 +313,38 @@ func TestMenuCardJSONShape(t *testing.T) {
 	config, _ := parsed["config"].(map[string]any)
 	if config["update_multi"] != true {
 		t.Errorf("update_multi = %v", config["update_multi"])
+	}
+}
+
+// 一个 chat 的第一条消息必须被处理：
+// 曾经这里向无缓冲通道发送、抱着 chat 的锁死住，
+// 之后所有消息全部卡死 ( 零日志 ) —— 回归锁。
+func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
+	c := New("a", "b", "", "t", &state.MemStore{}, t.TempDir())
+	var mu sync.Mutex
+	var handled []string
+	var wg sync.WaitGroup
+	for _, id := range []string{"m1", "m2", "m3"} {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			c.enqueue("chat1", func() {
+				mu.Lock()
+				defer mu.Unlock()
+				handled = append(handled, id)
+			})
+		}(id)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("messages stuck: the first message of a chat deadlocked the queue")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(handled) != 3 {
+		t.Fatalf("handled = %v, want all three", handled)
 	}
 }

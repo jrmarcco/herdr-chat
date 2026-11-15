@@ -12,11 +12,11 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/core"
 )
 
-// 对话框三通路的行为测试 ( 对应原版 engine.test.mjs 的对话框部分 )：
-// 屏幕通路发卡与点击按键、防陈旧卡片、hook 通路 ( agent 自报 )、多选勾选
-// 与 Next、离开 blocked 关卡。
-
+// 对话框三通路的行为测试：
+// 屏幕通路发卡与点击按键、防陈旧卡片、hook 通路 ( agent 自报 )、
+// 多选勾选与 Next、离开 blocked 关卡。
 // 一屏 Claude 风格的权限对话框。
+
 func permissionScreen(cmd string) string {
 	rule := strings.Repeat("─", 60)
 	return strings.Join([]string{
@@ -57,15 +57,17 @@ func (r *rig) dialogCardValue() map[string]any {
 	return nil
 }
 
-// click：按已发出的卡构造一次点击——消息 id 来自 openCards，值来自卡片的
-// dialogValue，再叠上 pick/label/ticks/自由输入。
+// click 按已发出的卡构造一次点击——消息 id 来自 openCards，
+// 值来自卡片的dialogValue，再叠上 pick/label/ticks/自由输入。
 func (r *rig) click(pick, label, answer string) core.Click {
 	st, _ := r.store.Read()
 	oc, ok := st.OpenCards["default|t1"]
+
 	base := r.dialogCardValue()
 	if base == nil {
 		base = map[string]any{}
 	}
+
 	if !ok {
 		// 卡片已被答掉：退回已发出的卡的值 ( 你手里的旧卡就是这么点的 )。
 		v := map[string]any{}
@@ -78,6 +80,7 @@ func (r *rig) click(pick, label, answer string) core.Click {
 		}
 		return core.Click{Message: r.chat.LastPosted(), Value: v, Answer: answer}
 	}
+
 	v := map[string]any{}
 	for k, val := range base {
 		v[k] = val
@@ -118,6 +121,7 @@ func TestScreenDialogCardAndClick(t *testing.T) {
 	if _, ok := st.OpenCards["default|t1"]; !ok {
 		t.Fatalf("openCards 缺卡片: %+v", st.OpenCards)
 	}
+
 	value := r.dialogCardValue()
 	if value == nil || value["k"] == "" || value["s"] != sessDefault {
 		t.Fatalf("卡片值 = %v", value)
@@ -137,6 +141,7 @@ func TestScreenDialogCardAndClick(t *testing.T) {
 			pressed = true
 		}
 	}
+
 	if !pressed {
 		t.Errorf("数字键没有按下去: %+v", r.hc.KeysPressed())
 	}
@@ -165,6 +170,7 @@ func TestStaleCardRefreshesNotPresses(t *testing.T) {
 	if result.Card == nil {
 		t.Errorf("卡片该刷新为当前对话框")
 	}
+
 	// 再点一次 ( 用刷新后的卡值 )：这次按下去。
 	result, err = r.chat.Handlers.OnAction(clickValue(result.Value, "1", "Yes", ""))
 	if err != nil {
@@ -197,6 +203,7 @@ func TestFreeAnswerAndEsc(t *testing.T) {
 	if !strings.Contains(result.Toast, "Type your answer first") {
 		t.Errorf("toast = %q", result.Toast)
 	}
+
 	// 带文字：先选中那一项，再把话输进去。
 	r.hc.ClearSents()
 	if _, err := r.chat.Handlers.OnAction(r.click("2", "Type something.", "shipit")); err != nil {
@@ -251,6 +258,7 @@ func TestLeavingBlockedClosesCard(t *testing.T) {
 	if !closed {
 		t.Errorf("关卡结论该是 %q: %+v", DoneTitle, r.chat.Calls())
 	}
+
 	st, _ := r.store.Read()
 	if _, still := st.OpenCards["default|t1"]; still {
 		t.Errorf("openCards 该清掉")
@@ -268,6 +276,7 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 	}
 	r.reader.SetDialogNow(asked)
 	r.reader.ClearAnswered()
+
 	// herdrchat.ask 标签出现 → 发卡 ( own 通路 )。
 	r.hc.Change(sessDefault, "labels", "t1", map[string]any{
 		keyLabels: map[string]any{
@@ -275,6 +284,7 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 			asks.AskLabel: "1731500000-424242",
 		},
 	})
+
 	r.waitFor(t, "agent 上报的卡", func() bool { return r.countCalls("PostDialog") == 1 })
 	if value := r.dialogCardValue(); value == nil || value["k"] != "ask-1" {
 		t.Fatalf("卡片值 = %v", value)
@@ -288,8 +298,17 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 	if !strings.Contains(result.Toast, "✔") {
 		t.Errorf("toast = %q", result.Toast)
 	}
+	// 答完要随回调响应整卡换上关卡的样 ( 按钮随之消失——PATCH 换不掉 )。
+	if result.Card == nil || result.Card.Tone != core.ToneDone {
+		t.Errorf("answered card = %+v, want the done look", result.Card)
+	}
 	if len(r.reader.Answers()) != 1 || r.reader.Answers()[0].Pick != "1" {
 		t.Errorf("answer = %+v", r.reader.Answers())
+	}
+
+	// 答完卡片要收场：去按钮、写结论 ( 曾经只回 toast，卡永远停在提问的样子 )。
+	if got := r.countCalls("CloseDialog"); got != 1 {
+		t.Errorf("answered card was not closed: CloseDialog called %d times", got)
 	}
 	// 屏幕通路绝没被碰 ( 没按过键 )。
 	if len(r.hc.KeysPressed()) != 0 {
@@ -305,6 +324,7 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(r.reader.Answers()) != 1 {
 		t.Errorf("换问题后不该回答: %+v", r.reader.Answers())
 	}
@@ -379,12 +399,14 @@ func TestRestartRestoresOpenCard(t *testing.T) {
 	r.e.Stop()
 	r2 := New(r.chat, r.hc, r.e.Readers, r.store, []string{sessDefault})
 	r2.Quick = true
+	r2.ManualTimers = true
 	r2.StartedAt = time.Now().Add(-time.Hour)
 	t.Cleanup(r2.Stop)
 	if err := r2.Start(context.Background(), func() {}); err != nil {
 		t.Fatal(err)
 	}
 	r.waitFor(t, "重启完成", func() bool { return r.countCalls("Start") >= 2 })
+
 	// 同一屏 blocked 仍在：sweep 补卡时 postedDialog 已随 openCards 恢复 → 不重发。
 	// 稳定采样：计数在两轮间隔后仍是 1 ( 高负载下不等固定时长 )。
 	steadyAt := 0
@@ -402,7 +424,31 @@ func TestRestartRestoresOpenCard(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+
 	// 等待中的卡可以关闭 ( closeCard 找得到 )。
 	r.setIdleStatus()
 	r.waitFor(t, "关卡", func() bool { return r.countCalls("CloseDialog") >= 1 })
+}
+
+// turn 结束是提问卡的确定性收口：
+// 即使 hc 的 status 事件不来 ( 离开 blocked 的关卡扑空 )，
+// 终答发完也得把卡关掉——点完只回 toast 的话，卡永远橙着。
+func TestTurnDoneClosesTheDialogCard(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+
+	r.hc.SetScreen("t1", permissionScreen("make test"))
+	r.setBlocked()
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	if got := r.countCalls("CloseDialog"); got != 0 {
+		t.Fatalf("开局不该有关卡: %d", got)
+	}
+
+	// turn 结束 ( done )：读屏发终答之外，开着的卡要关。
+	r.hc.Turn(sessDefault, "t1", "done")
+	r.waitFor(t, "turn 完成关卡", func() bool { return r.countCalls("CloseDialog") >= 1 })
+	st, _ := r.store.Read()
+	if _, still := st.OpenCards["default|t1"]; still {
+		t.Fatalf("openCards 还留着: %+v", st.OpenCards)
+	}
 }

@@ -1,16 +1,18 @@
 // Package claude 是 Claude Code 的 reader ( hc status app "claude-code" )：
 // 读它自己的 transcript。
 //
-//	定位：终端前台 pid 在 ~/.claude/sessions/<pid>.json 里指名会话
-//	( {sessionId, cwd} )；transcript 在
-//	~/.claude/projects/<cwd 的非字母数字全替换为 '-'>/<sessionId>.jsonl。
+//	定位：
+//	终端前台 pid 在 ~/.claude/sessions/<pid>.json 里指名会话 ( {sessionId, cwd} )；
+//	transcript 在 ~/.claude/projects/<cwd 的非字母数字全替换为 '-'>/<sessionId>.jsonl。
 //
-// 条目：you 是你敲的话 ( 人的输入、turn 中途排进去的消息、你对提问的回答 )；
-// ai 是它的文本 ( end 标记 turn 的最后一条回答，stop_reason "end_turn" )，
-// 工作中说的有些话只存成 "narration" 块 ( 签名里带 narration 的 thinking 块 )，
-// 那些算文本，普通 thinking 不算；tool 是一次工具调用一行；image 是你贴的图
-// 或工具给它看的图。footer 的数据 ( 模型、上下文用量 ) 随回答带来；窗口与
-// 限额由 Claude Code 自答 ( claude -p /context、/usage，不产生模型调用 )。
+//	条目：
+//	you 是你敲的话 ( 人的输入、turn 中途排进去的消息、你对提问的回答 )；
+//	ai 是它的文本 ( end 标记 turn 的最后一条回答，stop_reason "end_turn" )，
+//	工作中说的有些话只存成 "narration" 块 ( 签名里带 narration 的 thinking 块 )，
+//	那些算文本，普通 thinking 不算；tool 是一次工具调用一行；
+//	image 是你贴的图或工具给它看的图。
+//	footer 的数据 ( 模型、上下文用量 ) 随回答带来；
+//	窗口与限额由 Claude Code 自答 ( claude -p /context、/usage，不产生模型调用 )。
 package claude
 
 import (
@@ -50,8 +52,17 @@ type Reader struct {
 	Shell func(ctx context.Context, session, machine, script string) (string, error)
 }
 
-// App / Short / Processes：reader 契约 ( App 是 hc status 里的名，Short 是
-// footer 里的短名 )。
+// New 装配一个能直接用的 reader：文件通路与 shell 都走 hc，meter 缓存自带；
+// asks 与引擎共享同一个实例 ( partial 的记忆必须是一份 )。
+func New(hc core.HC, shared *asks.Asks) *Reader {
+	return &Reader{
+		HC: hc, Files: hc, Asks: shared,
+		Cache: core.NewMeter(), Shell: hc.HomeShell,
+	}
+}
+
+// App / Short / Processes：
+// reader 契约 ( App 是 hc status 里的名，Short 是 footer 里的短名 )。
 func (r *Reader) App() string         { return App }
 func (r *Reader) Short() string       { return Short }
 func (r *Reader) Processes() []string { return Processes }
@@ -86,8 +97,7 @@ func textOf(content any) string {
 	return ""
 }
 
-// isNarration：带词的 thinking 块、签名里写着 narration——它工作时说的话
-// 只落盘在这种块里。
+// isNarration：带词的 thinking 块、签名里写着 narration——它工作时说的话只落盘在这种块里。
 func isNarration(block map[string]any) bool {
 	if block["type"] != "thinking" {
 		return false
@@ -128,7 +138,7 @@ func toolLine(block map[string]any) string {
 	return "▸ " + name + ": " + short
 }
 
-// taskCard ( FINAL_PLAN §2.B )：Claude 把活儿交给子代理 ( Task 工具 ) 时，
+// taskCard：Claude 把活儿交给子代理 ( Task 工具 ) 时，
 // 会话里单独成卡的一笔委托——交待了什么。
 func taskCard(block map[string]any) *core.Card {
 	if block["name"] != "Task" {
@@ -313,7 +323,6 @@ func parseFloat(s string) float64 {
 }
 
 // App/Processes/After/Rest：reader 契约。
-
 // After 给出游标之后的新内容；终端里没有可读的 Claude 时 Reading 为 nil。
 // 会话换了 transcript ( /clear、resume ) 时，旧文件里剩的先发。
 func (r *Reader) After(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error) {
@@ -422,7 +431,8 @@ func (r *Reader) Meter(ctx context.Context, session, address string, meta map[st
 			}
 			w := ContextWindowIn(out)
 			if w == 0 {
-				return nil, nil // 不缓存读不出的
+				// 不缓存读不出的。
+				return nil, nil
 			}
 			return w, nil
 		}, firstWait)

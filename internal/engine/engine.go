@@ -18,16 +18,13 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// 引擎：编排房间、发帖、入口与总览，把 hc 的事件流接到聊天侧
-// ( spec §6，移植自原版 lib/core/engine.mjs；按 optimization B1 拆成
-// engine / rooms / posting / intake / overview 五块，状态显式经由 Engine
-// 传递，不共享裸变量 )。
+// 引擎：编排房间、发帖、入口与总览，把 hc 的事件流接到聊天侧。
 //
-// 并发规则 ( spec §6.1 )：一个终端 key 一条串行 lane——它对房间、游标、卡片
-// 的一切按序发生，不同终端互不等待；所有 session 的首个事件快照与首次 cores
-// 读取完成之前，不派发任何 lane，远端机器的终端才能始终由同一个 session 认领。
+// 并发规则：
+// 一个终端 key 一条串行 lane —— 它对房间、游标、卡片的一切按序发生，不同终端互不等待；
+// 所有 session 的首个事件快照与首次 cores 读取完成之前，不派发任何 lane，远端机器的终端才能始终由同一个 session 认领。
+// 定时器与等待的节拍。测试用 Quick 把等待压到毫秒级。
 
-// 定时器与等待的节拍 ( spec §15 )。测试用 Quick 把等待压到毫秒级。
 const (
 	LiveEvery   = 5 * time.Second
 	SweepEvery  = 60 * time.Second
@@ -67,15 +64,32 @@ const (
 
 // Engine 是一次运行的全部状态。字段在 Start 前填好 ( 依赖注入，测试全用 fake )。
 type Engine struct {
+	mu sync.Mutex // 保护跨 lane 共享的内存状态
+
 	Chat      chats.Chat
 	HC        core.HC
 	Readers   *readers.Registry
 	Store     state.Store
 	Sessions  []string
-	History   map[string]bool // 回填的形态：file / folded
-	Inbox     string          // 收到的图片落地的目录
-	HomeDir   string          // 本机 home ( asks 协议的文件都在这；测试注入 )
+	History   map[string]bool   // 回填的形态：file / folded
+	Inbox     string            // 收到的图片落地的目录
+	HomeDir   string            // 本机 home ( asks 协议的文件都在这；测试注入 )
+	Env       map[string]string // 进程环境 ( XDG 目录定位用；装配处注入 )
 	StartedAt time.Time
+
+	// Version 是本进程的版本；Latest 问最新 release ( 装配处注入；nil 即不 // 做新版提示 )。
+	Version string
+	Latest  func(ctx context.Context) (string, error)
+
+	// SetOwner 记下配对成功的 owner ( 写进 config.env；装配处注入 )。
+	SetOwner func(ownerID string) error
+	// Restart 在配对成功后让进程让位给新 owner 的实例
+	// ( 装配处注入：退出，由服务或终端循环拉起 )。
+	Restart func()
+
+	// ManualTimers 不起 live/sweep/asks 定时器，测试自己 tick —— Quick 模式下 10ms 的定时器与断言抢时序，
+	// 是旧测试抖动的根 ( 测试用 )。
+	ManualTimers bool
 
 	// Quick 把重试退避、终答等待与定时器间隔压到毫秒级 ( 测试用 )。
 	Quick bool
@@ -87,6 +101,7 @@ type Engine struct {
 	lanes  *core.Lanes
 	asks   *asks.Asks
 	asking map[string]bool
+
 	// postedDialog: 终端 key -> 最后发过的对话框名 ( 一题一卡 )；
 	// dialogCards: 消息 -> 它展示的对话框 ( 点击按消息找回 )。
 	postedDialog map[string]string
@@ -95,7 +110,6 @@ type Engine struct {
 	branches     map[string]branchAt // 终端 key -> git 分支 ( 15s 缓存 )
 	commands     *CommandCatalog     // 斜杠命令目录 ( 懒建 )
 
-	mu          sync.Mutex // 保护下面这些跨 lane 共享的内存状态
 	views       map[string]*hccli.View
 	topology    *core.CoreViews
 	snapSeen    map[string]bool
@@ -113,6 +127,9 @@ type Engine struct {
 
 	inFlight atomic.Int64
 }
+
+// 真实 hc 适配器满足引擎对 hc 的全部要求 ( fake 的等价断言在 internal/fake )。
+var _ core.HC = (*hccli.CLI)(nil)
 
 // New 装配一个引擎；Start 之前还需填好依赖字段。
 func New(chat chats.Chat, hc core.HC, reg *readers.Registry, store state.Store, sessions []string) *Engine {
@@ -158,7 +175,8 @@ func (e *Engine) sleep(d time.Duration) {
 
 func (e *Engine) every(d time.Duration) time.Duration {
 	if e.Quick {
-		return 10 * time.Millisecond // 1ms 在并行测试下竞态面太大；10ms 依然够快
+		// 1ms 在并行测试下竞态面太大；10ms 依然够快。
+		return 10 * time.Millisecond
 	}
 	return d
 }
@@ -205,8 +223,8 @@ func (e *Engine) later(session, address, label string, fn func() error) {
 	})
 }
 
-// machineDown 记一台够不到的机器：房间挂起 ( endGone 的 reachable 检查会放过
-// 它 )，提示只说一次。M3 的对话框与 M7 的 status 会再读它。
+// machineDown 记一台够不到的机器：
+// 房间挂起 ( endGone 的 reachable 检查会放过它 )，提示只说一次。
 func (e *Engine) machineDown(session, machine string) {
 	xlog.For("engine").Warn("机器暂时不可达，房间挂起等待", "session", session, "machine", machine)
 }
@@ -216,7 +234,8 @@ func (e *Engine) machineDown(session, machine string) {
 func (e *Engine) Start(parent context.Context, onReady func()) error {
 	e.ctx, e.cancel = context.WithCancel(parent)
 	log := xlog.For("engine")
-	log.Info("herdrchat 启动", "chat", e.Chat.Name(), "sessions", e.Sessions)
+
+	log.Info("herdrchat 启动", "chat", e.Chat.Name, "sessions", e.Sessions)
 	if !e.Chat.Ready() {
 		log.Info("owner 未设置：在它配对之前不建任何房间")
 	}
@@ -247,9 +266,12 @@ func (e *Engine) Start(parent context.Context, onReady func()) error {
 	}()
 
 	e.restoreDialogs()
-	e.startTimer(e.every(LiveEvery), e.liveTick)
-	e.startTimer(e.every(SweepEvery), e.sweepTick)
-	e.startTimer(e.every(everyAsks), e.asksTick)
+	if !e.ManualTimers {
+		e.startTimer(e.every(LiveEvery), e.liveTick)
+		e.startTimer(e.every(SweepEvery), e.sweepTick)
+		e.startTimer(e.every(everyAsks), e.asksTick)
+		e.startUpdateWatch()
+	}
 	return nil
 }
 
@@ -336,7 +358,7 @@ func (e *Engine) startTimer(every time.Duration, fn func()) {
 	e.mu.Unlock()
 }
 
-// afterFirstSnapshot：首快照与 cores 都到齐后的一次性收尾 ( spec §6.11 )。
+// afterFirstSnapshot：首快照与 cores 都到齐后的一次性收尾。
 func (e *Engine) afterFirstSnapshot() {
 	e.endGone()
 	// 重启前暂存的消息：终端已不再等待的，现在送进去。
@@ -373,6 +395,7 @@ func (e *Engine) readCores() {
 		}
 		cores[session] = core.CoreInfo{Self: self, Links: links}
 	}
+
 	e.mu.Lock()
 	e.topology = core.CoreViewsOf(e.Sessions, cores)
 	e.mu.Unlock()
@@ -392,8 +415,10 @@ func (e *Engine) handles(session, address string) bool {
 	if hccli.MachineOf(address) == "" {
 		return true
 	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	for _, s := range e.Sessions {
 		if v := e.views[s]; v != nil {
 			if t, ok := v.Get(address); ok && t.Live() {
@@ -407,9 +432,11 @@ func (e *Engine) handles(session, address string) bool {
 // watch 接线一个 session 的事件流。
 func (e *Engine) watch(session string) {
 	view := hccli.NewView()
+
 	e.mu.Lock()
 	e.views[session] = view
 	e.mu.Unlock()
+
 	e.HC.FollowEvents(e.ctx, session, hccli.EventHandlers{
 		OnSnapshot: func(list []hccli.Terminal) {
 			e.mu.Lock()
@@ -419,8 +446,10 @@ func (e *Engine) watch(session string) {
 					close(e.firstSnap) // 每个 session 的首快照都到齐了
 				}
 			}
+
 			e.mu.Unlock()
 			e.scheduleOverview()
+
 			for _, record := range list {
 				r := record
 				if whereShown(r) {
@@ -444,12 +473,9 @@ func (e *Engine) onChange(session string, ev hccli.ChangeEvent) {
 		return
 	}
 	record := ev.Record
-	switch ev.Type {
-	case "status":
-		e.noteState(session, ev.Address, record)
-	case "labels":
-		// 标签事件两头兼顾：先让 hook 的卡片走起来，房间照常跟。
-		e.onAsk(session, ev.Address, record)
+	roomIfShown := func() {
+		// snapshot / created|restarted|labels|status|title 且带 where 标签 → ensureRoom。
+		// /new 的终端带着标签出生，没有后续 labels事件 —— created 与 status 不触发的话，房间永远等不来。
 		if whereShown(record) {
 			r := record
 			e.later(session, ev.Address, "room", func() error {
@@ -457,6 +483,18 @@ func (e *Engine) onChange(session string, ev hccli.ChangeEvent) {
 				return err
 			})
 		}
+	}
+
+	switch ev.Type {
+	case "status":
+		e.noteState(session, ev.Address, record)
+		roomIfShown()
+	case "created", "restarted", "title":
+		roomIfShown()
+	case "labels":
+		// 标签事件两头兼顾：先让 hook 的卡片走起来，房间照常跟。
+		e.onAsk(session, ev.Address, record)
+		roomIfShown()
 	case "finished", "removed":
 		e.later(session, ev.Address, "end", func() error {
 			return e.postEnd(session, ev.Address, record, reasonOf(ev))
@@ -468,6 +506,7 @@ func (e *Engine) onChange(session string, ev hccli.ChangeEvent) {
 func (e *Engine) noteState(session, address string, record hccli.Terminal) {
 	k := e.keyOf(session, address)
 	now := record.State()
+
 	e.mu.Lock()
 	was := e.lastState[k]
 	e.lastState[k] = now
@@ -475,6 +514,7 @@ func (e *Engine) noteState(session, address string, record hccli.Terminal) {
 		e.since[k] = time.Now()
 	}
 	e.mu.Unlock()
+
 	if now != stateBlocked {
 		if was == stateBlocked {
 			e.later(session, address, "held", func() error {
@@ -495,11 +535,13 @@ func (e *Engine) noteState(session, address string, record hccli.Terminal) {
 		})
 		return
 	}
-	// 从 working 直接进 blocked 的归 turn 事件 ( 先发它说的话 )；其余的
-	// blocked ( 一个对话框直接进下一个 ) 在这里发卡。
+
+	// 从 working 直接进 blocked 的归 turn 事件 ( 先发它说的话 )；
+	// 其余的 blocked ( 一个对话框直接进下一个 ) 在这里发卡。
 	if was == stateWorking || !whereShown(record) || !e.handles(session, address) || e.agentOf(record) == nil {
 		return
 	}
+
 	rec := record
 	e.later(session, address, "dialog", func() error {
 		// 卡片上手时对话框可能已答掉，postBlocked 里会再核一次状态。
@@ -515,7 +557,8 @@ func reasonOf(ev hccli.ChangeEvent) string {
 	return reason
 }
 
-// onTurn：一个 turn 离开了 working。blocked ( 需要人 ) 属 M3 的对话框状态机，
+// onTurn 一个 turn 离开了 working。
+// blocked ( 需要人 ) 属 M3 的对话框状态机，
 // 这里先把它说过的话发出去；turn 结束则等终答、发正文、补回执。
 func (e *Engine) onTurn(session string, ev hccli.TurnEvent) {
 	e.scheduleOverview()
@@ -523,10 +566,12 @@ func (e *Engine) onTurn(session string, ev hccli.TurnEvent) {
 	if !whereShown(record) || !e.handles(session, ev.Address) {
 		return
 	}
+
 	reader := e.agentOf(record)
 	if reader == nil {
 		return // 房间只镜像 agent：shell 之类自己不会说话
 	}
+
 	stateWord := ev.State
 	e.later(session, ev.Address, "turn", func() error {
 		switch stateWord {
@@ -537,6 +582,10 @@ func (e *Engine) onTurn(session string, ev hccli.TurnEvent) {
 		default:
 			e.postTurn(session, ev.Address, record, reader)
 			e.markDone(e.keyOf(session, ev.Address), 0)
+			// turn 到头：它开着的提问卡不再有人等，收掉。
+			// 不依赖 hc 的 status 事件 —— "离开 blocked"那条事件并不总会来，
+			// turn 的 done 是确定性的收口点。
+			e.closeCard(e.keyOf(session, ev.Address), DoneTitle)
 			return nil
 		}
 	})
@@ -559,8 +608,7 @@ func foregroundName(record hccli.Terminal) string {
 	return name
 }
 
-// readable 列出一个 session 里"跟得住"的终端：live、被本 session 跟随、
-// 有 reader。
+// readable 列出一个 session 里"跟得住"的终端：live、被本 session 跟随、有 reader。
 func (e *Engine) readable(session string) []struct {
 	record hccli.Terminal
 	reader readers.Reader
@@ -628,7 +676,8 @@ func (e *Engine) sweep(session string) {
 		record, reader := tr.record, tr.reader
 		address := record.Address()
 		k := e.keyOf(session, address)
-		// 等着却没卡 ( bot 停机期间开始的等待、错过的事件 )：现在补；有卡不重发。
+		// 等着却没卡 ( bot 停机期间开始的等待、错过的事件 )：现在补；
+		// 有卡不重发。
 		if record.State() == stateBlocked && !e.openCardExists(k) {
 			rec := record
 			e.later(session, address, "dialog", func() error {
@@ -636,6 +685,7 @@ func (e *Engine) sweep(session string) {
 			})
 			continue
 		}
+
 		if asks.AskOf(record) != "" {
 			if !e.openCardExists(k) {
 				rec := record
@@ -645,9 +695,11 @@ func (e *Engine) sweep(session string) {
 			}
 			continue
 		}
+
 		if record.State() == stateWorking {
 			continue
 		}
+
 		e.later(session, address, "sweep", func() error {
 			if err := e.postRead(session, address, record, reader, false, false); err != nil {
 				return err
@@ -661,6 +713,10 @@ func (e *Engine) sweep(session string) {
 	}
 }
 
+// SetAsks 换掉引擎用的 asks 实例——与 readers 共享同一个
+// ( partial 与 finished 的记忆必须是一份 )。
+func (e *Engine) SetAsks(a *asks.Asks) { e.asks = a }
+
 // SetAsksHome 把 asks 的本机 home 换到别处 ( 测试隔离：绝不碰真实 home )。
 func (e *Engine) SetAsksHome(home string) { e.asks = asks.New(e.HC, home) }
 
@@ -669,17 +725,18 @@ func (e *Engine) onAction(click core.Click) (core.ActionResult, error) {
 	return e.onActionDialog(click)
 }
 
-// onAsk：agent 的 hook 问/答了 ( 终端 herdrchat.ask 标签的出现与消失，
-// spec §6.5 通路 A )。标签出现——无论状态如何 ( Codex 不显示提示、一边干活
-// 一边等 )——立刻发卡；消失说明 hook 结束 ( 聊天里答的、终端里答的、或超时 )，
-// 关卡，终端还在等的再读屏发新卡。
+// onAsk：agent 的 hook 问/答了 ( 终端 herdrchat.ask 标签的出现与消失，通路 A )。
+// 标签出现——无论状态如何 ( Codex 不显示提示、一边干活一边等 ) —— 立刻发卡；
+// 消失说明 hook 结束 ( 聊天里答的、终端里答的、或超时 )，关卡，终端还在等的再读屏发新卡。
 func (e *Engine) onAsk(session, address string, record hccli.Terminal) {
 	k := e.keyOf(session, address)
 	id := asks.AskOf(record)
+
 	e.mu.Lock()
 	was := e.lastAsk[k]
 	e.lastAsk[k] = id
 	e.mu.Unlock()
+
 	if id == was {
 		return
 	}
@@ -693,17 +750,18 @@ func (e *Engine) onAsk(session, address string, record hccli.Terminal) {
 		})
 		return
 	}
+
 	e.later(session, address, "dialog", func() error {
 		if e.ownDialogOpen(k) {
 			e.closeCard(k, DoneTitle)
 		}
-		// 只有 hook 的那张被遗忘；期间从屏幕拿到卡的不动 ( Codex 自己的提示
-		// 在 hook 结束后才出现 )，也不会重发。
+		// 只有 hook 的那张被遗忘；期间从屏幕拿到卡的不动 ( Codex 自己的提示在 hook 结束后才出现 )，也不会重发。
 		e.mu.Lock()
 		if was != "" && (e.postedDialog[k] == was || strings.HasPrefix(e.postedDialog[k], was+"#")) {
 			delete(e.postedDialog, k)
 		}
 		e.mu.Unlock()
+
 		if term, err := e.HC.GetTerminal(e.ctx, session, address); err == nil {
 			if term.State() == stateBlocked {
 				rec := record
@@ -717,8 +775,7 @@ func (e *Engine) onAsk(session, address string, record hccli.Terminal) {
 	})
 }
 
-// ClaimAsks ( spec §6.5 通路 A 的收尾 )：给没能标终端的 hook 请求找终端
-// ( reader 的 StrayAsk 认领、hc label 打标签 )；hook 已死的悬空标签撤掉。
+// ClaimAsks：给没能标终端的 hook 请求找终端 ( reader 的 StrayAsk 认领、hc label 打标签 )；hook 已死的悬空标签撤掉。
 // everywhere 时连远端机器也扫 ( sweep 周期 )，否则只看本机。
 func (e *Engine) claimAsks(session string, everywhere bool) {
 	e.mu.Lock()
@@ -728,11 +785,13 @@ func (e *Engine) claimAsks(session string, everywhere bool) {
 	}
 	e.asking[session] = true
 	e.mu.Unlock()
+
 	defer func() {
 		e.mu.Lock()
 		delete(e.asking, session)
 		e.mu.Unlock()
 	}()
+
 	for _, tr := range e.readable(session) {
 		record, reader := tr.record, tr.reader
 		machine := hccli.MachineOf(record.Address())

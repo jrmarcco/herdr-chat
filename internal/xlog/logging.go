@@ -1,5 +1,5 @@
-// Package xlog 提供项目统一的日志输出:
-// 单行紧凑格式 ( 时间 级别 组件 消息 k=v )、TTY 着色与可选双写落盘。
+// Package xlog 提供项目统一的日志输出：单行紧凑格式 ( 时间 级别 组件
+// 消息 k=v )、TTY 着色与可选双写落盘。
 //
 // 环境变量:
 //
@@ -22,7 +22,7 @@ const logFilePerm os.FileMode = 0o644
 const componentKey = "component"
 
 // For 返回携带组件标识的日志器 ( 组件即日志的 功能域 标签，如 engine、approval )。
-// 每次即时解析 slog.Default()，测试期替换全局 handler 后新调用即刻生效。
+// 每次即时解析 slog.Default，测试期替换全局 handler 后新调用即刻生效。
 func For(component string) *slog.Logger {
 	return slog.Default().With(componentKey, component)
 }

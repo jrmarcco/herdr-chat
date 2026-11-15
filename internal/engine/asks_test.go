@@ -16,12 +16,10 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
 
-// hook 的 asks 协议 ( spec §8.2 )：req/ans 文件、herdrchat.ask 标签、部分答案
-// 与已答完的遗忘。fake 的 HomeShell 本机分支真的跑 sh，文件协议由此用真实
-// 文件系统验证。
+// hook 的 asks 协议：req/ans 文件、herdrchat.ask 标签、部分答案与已答完的遗忘。
+// fake 的 HomeShell 本机分支真的跑 sh，文件协议由此用真实文件系统验证。
 
-// askTestEnv 备好一个 home：hook 在场、一条活着的请求 ( pid 用测试自己的进程，
-// kill -0 自然活着 )。
+// askTestEnv 备好一个 home：hook 在场、一条活着的请求 ( pid 用测试自己的进程，kill -0 自然活着 )。
 func askTestEnv(t *testing.T) (*asks.Asks, *fake.FakeHC, string, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -34,9 +32,12 @@ func askTestEnv(t *testing.T) (*asks.Asks, *fake.FakeHC, string, string) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(home, asks.HookFile), []byte("#!/bin/sh\n"), 0o755); err != nil { //nolint:gosec // G306: 测试 stub 脚本需要可执行位
+
+	//nolint:gosec // G306: 测试 stub 脚本需要可执行位。
+	if err := os.WriteFile(filepath.Join(home, asks.HookFile), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	hc := fake.NewFakeHC()
 	hc.HomeDirSet = home
 	asks := asks.New(hc, home)
@@ -57,7 +58,8 @@ func writeReq(t *testing.T, home, id string, body map[string]any) {
 
 func readAns(t *testing.T, home, id string) string {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(home, asks.AsksDir, "ans", id+".json")) //nolint:gosec // G304: 测试目录内的文件
+	//nolint:gosec // G304: 测试目录内的文件。
+	raw, err := os.ReadFile(filepath.Join(home, asks.AsksDir, "ans", id+".json"))
 	if err != nil {
 		return ""
 	}

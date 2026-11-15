@@ -13,6 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkimv2 "github.com/larksuite/oapi-sdk-go/v3/service/im/v2"
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
 )
@@ -22,9 +23,7 @@ const (
 	stateWorking = "working"
 )
 
-// 总览卡片 ( 移植自原版 overview.mjs )：一行一个终端，状态彩签、群链接、
-// 从何时起；等着你的排最前。
-
+// 总览卡片：一行一个终端，状态彩签、群链接、从何时起；等着你的排最前。
 var stateWords = map[string]struct {
 	Color string
 	Word  string
@@ -48,7 +47,7 @@ func overviewText(rows []core.OverviewRow) string {
 	sorted := make([]core.OverviewRow, len(rows))
 	copy(sorted, rows)
 	// 先按状态 rank，再按名字。
-	for i := 0; i < len(sorted); i++ {
+	for i := range sorted {
 		for j := i + 1; j < len(sorted); j++ {
 			si, sj := stateWords[sorted[i].State], stateWords[sorted[j].State]
 			if si.Rank == 0 && sorted[i].State == "" {
@@ -147,6 +146,8 @@ func overviewCard(rows []core.OverviewRow, now time.Time) map[string]any {
 // sdkClient 把官方 SDK 包成 LarkAPI。
 type sdkClient struct {
 	cli *lark.Client
+	// owner 是建群时拉进来的人 ( open_id )。
+	owner string
 }
 
 func (s *sdkClient) SendMessage(ctx context.Context, receiveIDType, receiveID, msgType, content string) (string, error) {
@@ -274,10 +275,41 @@ func messageReceiveToMap(event *larkim.P2MessageReceiveV1) map[string]any {
 	}
 }
 
+// CreateChat 建一个群并把 owner 拉进来 ( bot 是群主 )。
 func (s *sdkClient) CreateChat(ctx context.Context, name, description string) (string, error) {
-	ownerID := "" // 由 Chat 注入；这里读不到，走 s.ownerOpenID
-	_ = ownerID
-	return "", fmt.Errorf("CreateChat 需要 owner：走 Chat.OpenRoom")
+	if s.owner == "" {
+		return "", fmt.Errorf("feishu chat.create: no owner to invite (pair first)")
+	}
+	body := larkim.NewCreateChatReqBodyBuilder().
+		Name(name).
+		Description(description).
+		UserIdList([]string{s.owner}).
+		Build()
+	req := larkim.NewCreateChatReqBuilder().UserIdType(idOpen).Body(body).Build()
+	resp, err := s.cli.Im.Chat.Create(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if resp.Code != 0 {
+		return "", fmt.Errorf("feishu chat.create %d: %s", resp.Code, resp.Msg)
+	}
+	if resp.Data == nil || resp.Data.ChatId == nil {
+		return "", fmt.Errorf("feishu chat.create: no chat id in the answer")
+	}
+	return *resp.Data.ChatId, nil
+}
+
+// DeleteChat 解散群 ( im.v1 chat.delete；bot 须是群主——建群时就是 )。
+func (s *sdkClient) DeleteChat(ctx context.Context, chatID string) error {
+	req := larkim.NewDeleteChatReqBuilder().ChatId(chatID).Build()
+	resp, err := s.cli.Im.Chat.Delete(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.Code != 0 {
+		return fmt.Errorf("feishu chat.delete %d: %s", resp.Code, resp.Msg)
+	}
+	return nil
 }
 
 func (s *sdkClient) RenameChat(ctx context.Context, chatID, name string) error {
@@ -393,17 +425,64 @@ func (s *sdkClient) DeleteReaction(ctx context.Context, messageID, reactionID st
 	return nil
 }
 
+// 租户标签 ( im.v2 )：标签类型与它绑定的业务实体类型。
+const (
+	tagTypeTenant = "tenant"
+	tagBizChat    = "chat"
+)
+
+// CreateTag 建一个租户标签，返回它的 id；
+// 同名标签已在时飞书报重复并给出那个 id——拿来用即可 ( 重装或换机后标签不会成双 )。
 func (s *sdkClient) CreateTag(ctx context.Context, name string) (string, error) {
-	// im.v2.tag.create 走原生请求 ( SDK 的 v2 资源面 )。
-	return "", fmt.Errorf("tag 走原生请求 ( M5 收尾时接 )")
+	tag := larkimv2.NewCreateTagBuilder().TagType(tagTypeTenant).Name(name).Build()
+	req := larkimv2.NewCreateTagReqBuilder().
+		Body(larkimv2.NewCreateTagReqBodyBuilder().CreateTag(tag).Build()).
+		Build()
+	resp, err := s.cli.Im.V2.Tag.Create(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	if resp.Data != nil {
+		if resp.Data.Id != nil && *resp.Data.Id != "" {
+			return *resp.Data.Id, nil
+		}
+		if why := resp.Data.CreateTagFailReason; why != nil && why.DuplicateId != nil && *why.DuplicateId != "" {
+			return *why.DuplicateId, nil
+		}
+	}
+	return "", fmt.Errorf("feishu tag.create %d: %s", resp.Code, resp.Msg)
 }
 
+// BindTag 把标签绑到一个群上。
 func (s *sdkClient) BindTag(ctx context.Context, tagID, chatID string) error {
-	return fmt.Errorf("tag 走原生请求 ( M5 收尾时接 )")
+	req := larkimv2.NewCreateBizEntityTagRelationReqBuilder().
+		Body(larkimv2.NewCreateBizEntityTagRelationReqBodyBuilder().
+			TagBizType(tagBizChat).BizEntityId(chatID).TagIds([]string{tagID}).Build()).
+		Build()
+	resp, err := s.cli.Im.V2.BizEntityTagRelation.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.Code != 0 {
+		return fmt.Errorf("feishu tag.bind %d: %s", resp.Code, resp.Msg)
+	}
+	return nil
 }
 
+// UnbindTag 把标签从一个群上解下来。
 func (s *sdkClient) UnbindTag(ctx context.Context, tagID, chatID string) error {
-	return fmt.Errorf("tag 走原生请求 ( M5 收尾时接 )")
+	req := larkimv2.NewUpdateBizEntityTagRelationReqBuilder().
+		Body(larkimv2.NewUpdateBizEntityTagRelationReqBodyBuilder().
+			TagBizType(tagBizChat).BizEntityId(chatID).TagIds([]string{tagID}).Build()).
+		Build()
+	resp, err := s.cli.Im.V2.BizEntityTagRelation.Update(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.Code != 0 {
+		return fmt.Errorf("feishu tag.unbind %d: %s", resp.Code, resp.Msg)
+	}
+	return nil
 }
 
 // cardActionToMap 把 SDK 的卡片回调结构变回引擎用的 map。

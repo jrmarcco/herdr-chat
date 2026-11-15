@@ -58,6 +58,17 @@ type Reader struct {
 	laterPart map[string]map[int]string
 }
 
+// New 装配一个能直接用的 reader：文件通路与 shell 走 hc，asks 与引擎共享
+// 同一个实例；提问状态机用的几张表在这里建好 ( 空表上写会炸 )。
+func New(hc core.HC, shared *asks.Asks) *Reader {
+	return &Reader{
+		HC: hc, Files: hc, Asks: shared, Shell: hc.HomeShell,
+		found:     map[string]string{},
+		laterDone: map[string]bool{},
+		laterPart: map[string]map[int]string{},
+	}
+}
+
 func textOf(content any) string {
 	blocks, ok := content.([]any)
 	if !ok {
@@ -302,8 +313,7 @@ func PickLog(list, cwd string, started time.Time) string {
 	if len(pool) == 0 {
 		pool = mine
 		sort.Slice(pool, func(i, j int) bool { return pool[j].file < pool[i].file }) // 文件名最新者
-		best := pool[0]
-		return best.file
+		return pool[0].file
 	}
 	sort.Slice(pool, func(i, j int) bool { return pool[i].began.Before(pool[j].began) })
 	return pool[0].file
@@ -397,9 +407,7 @@ func TitleOf(title string) string {
 	return strings.TrimSpace(strings.Split(plain, " | ")[0])
 }
 
-// ---------- 它的审批，走 herdrchat 的 hook ----------
-
-// RequestWords 把请求要做的事说成卡上的话。
+// ---------- 它的审批，走 herdrchat 的 hook ---------- // RequestWords 把请求要做的事说成卡上的话。
 func RequestWords(tool string, input map[string]any) string {
 	command := ""
 	switch list := input["command"].(type) {

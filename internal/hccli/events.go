@@ -4,18 +4,20 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"maps"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// Terminal 是 hc 报告的一个终端记录 ( 原始 JSON 对象：address、
-// status{state,app}、labels{where,herdr.space,herdr.tab,herdrchat.ask}、
-// title、pid、foreground、turn… )。字段的含义始终归 hc；下面的访问器只读
-// 引擎跟踪的那几个。
+// Terminal 是 hc 报告的一个终端记录
+// ( 原始 JSON 对象：address、status{state,app}、labels{where,herdr.space,herdr.tab,herdrchat.ask}、title、pid、foreground、turn… )。
+// 字段的含义始终归 hc；
+// 下面的访问器只读引擎跟踪的那几个。
 type Terminal map[string]any
 
 func (t Terminal) str(path ...string) string {
@@ -88,8 +90,12 @@ type EventHandlers struct {
 const EventsRestartDelay = 3 * time.Second
 
 // eventsMaxLine 是扫描器的单行上限：终端很多时首行快照可达 MB 级
-// ( Node 版无上限读取是其自身的隐性 bug；这里显式设限 )。
+// ( 显式设限：无上限的快照行会吃内存 )。
 const eventsMaxLine = 10 << 20
+
+// eventsQuiet 是静默看门狗的窗口：超过它没有任何一行 ( 心跳 ~17s 一条 )，
+// 视为这条订阅连接已被核心遗忘，杀掉重连。
+const eventsQuiet = 45 * time.Second
 
 // View 是一个 session 的终端实况集合，由其事件流保持更新。并发安全。
 type View struct {
@@ -152,8 +158,8 @@ func (v *View) Delete(address string) {
 	delete(v.terminals, address)
 }
 
-// ApplySnapshot 用一份快照替换 view 中的全部——即事件流首行与每个
-// `missed` 携带的内容。真实跟随器与 fake 共用它，两者以同一方式维护 view。
+// ApplySnapshot 用一份快照替换 view 中的全部——即事件流首行与每个 `missed` 携带的内容。
+// 真实跟随器与 fake 共用它，两者以同一方式维护 view。
 func (v *View) ApplySnapshot(list []Terminal) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -181,10 +187,12 @@ func asTerminals(v any) []Terminal {
 	return out
 }
 
-// FollowEvents 为一个 session ( 本机与已连接机器 ) 跟随 `hc events --json`
-// 直到 ctx 结束，并保持 view 更新。格式：首行是快照 {seq, terminals}；之后是
-// JSON-RPC 通知：event {seq, type, terminal, data}、heartbeat {seq}、
-// missed {seq, terminals} ( 一份新快照 )。进程结束后 3 秒重启。
+// FollowEvents 为一个 session ( 本机与已连接机器 ) 跟随 `hc events --json` 直到 ctx 结束，并保持 view 更新。
+//
+// 格式：
+// 首行是快照 {seq, terminals}；
+// 之后是 JSON-RPC 通知：event {seq, type, terminal, data}、heartbeat {seq}、missed {seq, terminals} ( 一份新快照 )。
+// 进程结束后 3 秒重启。
 func (c *CLI) FollowEvents(ctx context.Context, session string, h EventHandlers, view *View) {
 	if view == nil {
 		view = NewView()
@@ -207,8 +215,15 @@ func (c *CLI) FollowEvents(ctx context.Context, session string, h EventHandlers,
 
 func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, view *View) {
 	// hc 的路径来自本机配置 ( Bin / HERDRCHAT_HC / PATH )，是运维自己指定的，非不可信输入。
-	cmd := exec.CommandContext(ctx, c.bin(), "events", "--json") //nolint:gosec // G204: hc 路径来自本机配置，非不可信输入
+	//nolint:gosec // G204: hc 路径来自本机配置，非不可信输入。
+	cmd := exec.CommandContext(ctx, c.bin(), "events", "--json")
 	cmd.Env = c.envFor(session)
+
+	// 独立进程组 + WaitDelay：
+	// 杀掉时要连孙进程一起 ( 孤儿握着 stderr 管道会把Wait 卡成死等 )；
+	// 进程退出后管道未关时 WaitDelay 强制回收。
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = 3 * time.Second
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		xlog.For("hccli").Warn("事件流 stdout 管道建立失败", "error", err)
@@ -224,16 +239,18 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 		return
 	}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() { // 事件流自己的抱怨，逐行记录
-		defer wg.Done()
+	// 事件流自己的抱怨，逐行记录。
+	wg.Go(func() {
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
 			if line := strings.TrimSpace(sc.Text()); line != "" {
 				xlog.For("hccli").Warn("事件流 stderr", "text", line)
 			}
 		}
-	}()
+		if err := sc.Err(); err != nil {
+			xlog.For("hccli").Warn("事件流 stderr 读取失败", "error", err)
+		}
+	})
 
 	first := true
 	var seq float64
@@ -247,7 +264,8 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 	}
 	apply := func(params map[string]any) {
 		at, _ := params["seq"].(float64)
-		if at <= seq { // 已被更新的快照覆盖
+		// 已被更新的快照覆盖。
+		if at <= seq {
 			return
 		}
 		seq = at
@@ -262,9 +280,7 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 		case "removed":
 			delete(view.terminals, name)
 		case kindFinished:
-			for k, v := range data {
-				record[k] = v
-			}
+			maps.Copy(record, data)
 			record["state"] = "finished"
 			record["foreground"] = nil
 			view.terminals[name] = record
@@ -273,9 +289,7 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 			record["foreground"] = nil
 			view.terminals[name] = record
 		case "status":
-			for k, v := range data {
-				record[k] = v
-			}
+			maps.Copy(record, data)
 			view.terminals[name] = record
 		case "labels":
 			if r := asMap(data["record"]); r != nil {
@@ -293,10 +307,9 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 				record["turn"] = turn["turn"]
 				view.terminals[name] = record
 			}
-		default: // title、size、keep：直接并入
-			for k, v := range data {
-				record[k] = v
-			}
+		default:
+			// title、size、keep：直接并入。
+			maps.Copy(record, data)
 			if record != nil {
 				view.terminals[name] = record
 			}
@@ -315,7 +328,46 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 64<<10), eventsMaxLine)
+
+	// 静默看门狗：hc 的流每 ~17s 一条心跳，事件更密。
+	// 长连订阅者偶发"拿到快照后核心不再向它投递"（连接开着、进程活着、什么也收不到——手动新订阅者一切正常，见上游排查记录），
+	// 进程不死循环也就不重启，引擎从此全聋。
+	// 任何行 ( 事件/心跳/快照 ) 都算活着；
+	// 静默超过 eventsQuiet 就杀掉子进程，
+	// 让既有的重启循环带一条新连接回来。
+	lastLine := time.Now()
+	lineSeen := make(chan struct{}, 1)
+	watchdogDone := make(chan struct{})
+	defer close(watchdogDone)
+	go func() {
+		t := time.NewTimer(eventsQuiet)
+		defer t.Stop()
+		for {
+			select {
+			case <-watchdogDone:
+				return
+			case <-lineSeen:
+				lastLine = time.Now()
+				t.Reset(eventsQuiet)
+			case <-t.C:
+				if time.Since(lastLine) >= eventsQuiet {
+					xlog.For("hccli").Warn("事件流静默过久，杀掉重连", "session", session, "quiet", eventsQuiet.String())
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					return
+				}
+				t.Reset(eventsQuiet)
+			}
+		}
+	}()
+	notifyLine := func() {
+		select {
+		case lineSeen <- struct{}{}:
+		default:
+		}
+	}
+
 	for sc.Scan() {
+		notifyLine()
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
@@ -343,6 +395,10 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 			snapshot(asTerminals(params["terminals"]), numOr(params["seq"], 0))
 		}
 	}
+	// 非正常结束 ( 行超长等 )：说一声，让 FollowEvents 的重启循环接手。
+	if err := sc.Err(); err != nil {
+		xlog.For("hccli").Warn("事件流读取失败，稍后重启", "session", session, "error", err)
+	}
 	wg.Wait()
 	_ = cmd.Wait()
 }
@@ -361,6 +417,8 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// Live 说终端记录是否处于 live 状态 ( hc 的快照与 created/restarted 记录带它；
-// finished/removed 之后不是 )。
-func (t Terminal) Live() bool { return t.str("state") == "live" }
+// Live 说终端记录是否处于 live 状态
+// ( hc 的快照与 created/restarted 记录带它；finished/removed 之后不是 )。
+func (t Terminal) Live() bool {
+	return t.str("state") == "live"
+}

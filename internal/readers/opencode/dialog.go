@@ -14,7 +14,6 @@ import (
 const refPermission = "permission"
 
 // 它的对话框，走它自己的 API：一个 form 或一条权限请求 ( 见包注释 )。
-
 // 权限请求的三选项。
 var permissionOptions = []core.AgentOption{
 	{N: 1, Label: "Allow once"},
@@ -22,12 +21,13 @@ var permissionOptions = []core.AgentOption{
 	{N: 3, Label: "Reject"},
 }
 
-// DialogOf 把 forms 与 permissions 排成现在等着的卡；answered 是各 form 已答
-// 的字段 ( {field: value} )。
+// DialogOf 把 forms 与 permissions 排成现在等着的卡；
+// answered 是各 form 已答的字段 ( {field: value} )。
 func DialogOf(forms, permissions any, answered map[string]map[string]any) *core.AgentDialog {
 	if form := firstOf(forms); form != nil {
 		done := answered[idOf(form)]
 		fields, _ := form["fields"].([]any)
+
 		var field map[string]any
 		left := 0
 		for _, f := range fields {
@@ -46,6 +46,7 @@ func DialogOf(forms, permissions any, answered map[string]map[string]any) *core.
 				field = fm
 			}
 		}
+
 		if field != nil {
 			key, _ := field["key"].(string)
 			ftype, _ := field["type"].(string)
@@ -81,10 +82,12 @@ func DialogOf(forms, permissions any, answered map[string]map[string]any) *core.
 					_ = value
 				}
 			}
+
 			if field["custom"] == true {
 				dialog.Options = append(dialog.Options, core.AgentOption{N: len(dialog.Options) + 1, Label: "Type your own answer"})
 				dialog.Free = len(dialog.Options)
 			}
+
 			var text []string
 			for _, part := range []string{str(field["title"]), str(field["description"])} {
 				if part != "" {
@@ -94,10 +97,12 @@ func DialogOf(forms, permissions any, answered map[string]map[string]any) *core.
 			if left > 1 {
 				text = append(text, fmt.Sprintf("(question %d of %d)", len(fields)-left+1, len(fields)))
 			}
+
 			dialog.Text = strings.Join(text, "\n")
 			return dialog
 		}
 	}
+
 	if request := firstOf(permissions); request != nil {
 		what := []string{str(request["message"]), str(request["action"])}
 		if resources, ok := request["resources"].([]any); ok {
@@ -113,6 +118,7 @@ func DialogOf(forms, permissions any, answered map[string]map[string]any) *core.
 			Ref: map[string]any{"type": "permission", "id": idOf(request)},
 		}
 	}
+
 	return nil
 }
 
@@ -182,6 +188,7 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 	if !ok || shown.Ref == nil {
 		return false, nil
 	}
+
 	params := map[string]string{paramSession: id}
 	ref, _ := shown.Ref.(map[string]any)
 	if ref["type"] == refPermission {
@@ -203,6 +210,7 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 				}
 			}
 		}
+
 		if decision == "" {
 			return false, nil
 		}
@@ -210,6 +218,7 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 		_, ok := r.api(ctx, session, machine, cwd, "session.permission.reply", params, map[string]any{"decision": decision}, false)
 		return ok, nil
 	}
+
 	formID, _ := ref["id"].(string)
 	if reply.Esc {
 		r.mu.Lock()
@@ -219,6 +228,7 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 		_, ok := r.api(ctx, session, machine, cwd, "session.form.cancel", params, nil, false)
 		return ok, nil
 	}
+
 	var value any
 	hasValue := false
 	if shown.Multi {
@@ -253,9 +263,11 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 			hasValue = true
 		}
 	}
+
 	if !hasValue || value == "" {
 		return false, nil
 	}
+
 	r.mu.Lock()
 	done := map[string]any{}
 	for k, v := range r.partial[formID] {
@@ -272,11 +284,14 @@ func (r *Reader) Answer(ctx context.Context, session, address string, shown core
 			}
 		}
 	}
+
 	if !fieldsDone {
 		r.partial[formID] = done
 		r.mu.Unlock()
-		return true, nil // 下一题接着问；都答了才送
+		// 下一题接着问；都答了才送。
+		return true, nil
 	}
+
 	delete(r.partial, formID)
 	r.mu.Unlock()
 	params["formID"] = formID

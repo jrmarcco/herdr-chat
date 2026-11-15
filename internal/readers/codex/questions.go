@@ -15,16 +15,18 @@ import (
 
 // 它的提问，从它自己的日志里读 ( 原文照抄的两种形态 )：
 //
-//	request_user_input ( Plan 模式 )：一次 function_call，arguments 是问题
-//	( [{id, header, question, options: [{label, description}]}] )；它等着 (
-//	blocked、kind question ) 直到对应的 function_call_output 落盘。Codex 一次
-//	画一题 ( "Question i/n" )：数字键选择并进下一题，最后一题按下即全部送出；
-//	"None of the above" ( 移动光标、tab、输入、Enter ) 是你自己的话。卡是屏幕
-//	正画的那一题，也用那些键回答。
-//	request_user_input_async：一条带 questions 的 AgentMessage；没有谁在等
-//	( turn 继续、或已结束 )，你的回答就是你发的下一条消息。Codex 不干活时它的
-//	卡常驻；点卡即发那条消息 ( 多题：每题有答案后一次发出 )。你接下来说的任何
-//	话都算对它的回答。
+//	request_user_input ( Plan 模式 )：
+//	一次 function_call，arguments 是问题 ( [{id, header, question, options: [{label, description}]}] )；
+// 	它等着 ( blocked、kind question ) 直到对应的 function_call_output 落盘。
+//	Codex 一次画一题 ( "Question i/n" )：数字键选择并进下一题，最后一题按下即全部送出；
+//	"None of the above" ( 移动光标、tab、输入、Enter ) 是你自己的话。
+// 	卡是屏幕正画的那一题，也用那些键回答。
+//
+//	request_user_input_async：
+// 	一条带 questions 的 AgentMessage；
+// 	没有谁在等 ( turn 继续、或已结束 )，你的回答就是你发的下一条消息。
+//  Codex 不干活时它的卡常驻；点卡即发那条消息 ( 多题：每题有答案后一次发出 )。
+// 	你接下来说的任何话都算对它的回答。
 
 // questionsTail 是查找提问要看的日志尾部行数。
 const (
@@ -77,14 +79,17 @@ func QuestionsIn(lines []string) Questions {
 		}
 		var entry map[string]any
 		if json.Unmarshal([]byte(line), &entry) != nil {
-			continue // 尾部被切断的首行
+			// 尾部被切断的首行。
+			continue
 		}
+
 		etype, _ := entry["type"].(string)
 		payload, _ := entry["payload"].(map[string]any)
 		if payload == nil {
 			payload = map[string]any{}
 		}
 		ptype, _ := payload["type"].(string)
+
 		switch {
 		case etype == "response_item" && ptype == "function_call" && payload["name"] == "request_user_input":
 			var args struct {
@@ -127,7 +132,8 @@ func QuestionsIn(lines []string) Questions {
 				out.Plan = nil
 			}
 		case etype == eventMsg && (ptype == "task_complete" || ptype == "turn_aborted"):
-			out.Plan = nil // 它的 turn 结束：没有谁在等
+			// 它的 turn 结束：没有谁在等。
+			out.Plan = nil
 		case etype == eventMsg && ptype == "item_completed":
 			item, _ := payload["item"].(map[string]any)
 			if item == nil {
@@ -187,9 +193,11 @@ func QuestionOnScreen(text string) *OnScreen {
 			at = i
 		}
 	}
+
 	if at < 0 {
 		return nil
 	}
+
 	m := questionLine.FindStringSubmatch(lines[at])
 	idx, _ := strconv.Atoi(m[1])
 	count, _ := strconv.Atoi(m[2])
@@ -208,11 +216,13 @@ func PlanDialog(plan *Questioned, index int) *core.AgentDialog {
 	if plan == nil || index < 0 || index >= len(plan.Questions) {
 		return nil
 	}
+
 	q := plan.Questions[index]
 	dialog := &core.AgentDialog{
 		Key: plan.ID + "#" + fmt.Sprint(index), Kind: kindQuestion, Title: "Codex asks",
 		Ref: map[string]any{idKey: plan.ID, "index": index, "count": len(plan.Questions), "question": q.Question},
 	}
+
 	var text []string
 	for _, o := range q.Options {
 		dialog.Options = append(dialog.Options, core.AgentOption{N: len(dialog.Options) + 1, Label: o.Label})
@@ -220,6 +230,7 @@ func PlanDialog(plan *Questioned, index int) *core.AgentDialog {
 			text = append(text, o.Label+": "+o.Description)
 		}
 	}
+
 	dialog.Options = append(dialog.Options, core.AgentOption{N: len(dialog.Options) + 1, Label: "None of the above (your own words)"})
 	dialog.Free = len(dialog.Options)
 	for _, part := range []string{q.Header, q.Question, strings.Join(text, "\n")} {
@@ -227,6 +238,7 @@ func PlanDialog(plan *Questioned, index int) *core.AgentDialog {
 			dialog.Text = strings.TrimSpace(dialog.Text + "\n" + part)
 		}
 	}
+
 	if len(plan.Questions) > 1 {
 		dialog.Text += fmt.Sprintf("\n(question %d of %d)", index+1, len(plan.Questions))
 	}
@@ -318,8 +330,9 @@ func machineOfAddr(address string) string {
 	return ""
 }
 
-// Dialog：Codex 现在问的是什么——hook 的请求优先，其次日志里的提问；都没有
-// 返回 nil；Plan 的题还没画出来也返回 nil ( 等它画 )。
+// Dialog：Codex 现在问的是什么——hook 的请求优先，其次日志里的提问；
+// 都没有返回 nil；
+// Plan 的题还没画出来也返回 nil ( 等它画 )。
 func (r *Reader) Dialog(ctx context.Context, session, address string) (*core.AgentDialog, error) {
 	ask, known := r.Asks.OpenAsk(ctx, session, address, App)
 	if !known {
@@ -328,10 +341,12 @@ func (r *Reader) Dialog(ctx context.Context, session, address string) (*core.Age
 	if ask != nil {
 		return AskDialog(ask), nil
 	}
+
 	found, term, ok := r.questionsOf(ctx, session, address)
 	if !ok {
 		return nil, nil
 	}
+
 	if found.Plan != nil {
 		screenText, _ := r.HC.ScreenTail(ctx, session, address, questionScreen)
 		on := QuestionOnScreen(screenText)
@@ -365,6 +380,7 @@ func (r *Reader) Dialog(ctx context.Context, session, address string) (*core.Age
 			}
 		}
 	}
+
 	return nil, nil
 }
 
@@ -400,6 +416,7 @@ func (r *Reader) answerPlan(ctx context.Context, session, address string, shown 
 	if reply.Esc {
 		return true, r.HC.Keys(ctx, session, address, []string{"esc"})
 	}
+
 	var option *core.AgentOption
 	for i, o := range shown.Options {
 		if fmt.Sprint(o.N) == reply.Pick {
@@ -407,6 +424,7 @@ func (r *Reader) answerPlan(ctx context.Context, session, address string, shown 
 			break
 		}
 	}
+
 	if option == nil {
 		return false, nil
 	}
@@ -423,6 +441,7 @@ func (r *Reader) answerPlan(ctx context.Context, session, address string, shown 
 	if on == nil || on.Index != idx {
 		return false, nil
 	}
+
 	moves := option.N - on.Cursor
 	if moves != 0 {
 		keys := make([]string, 0, abs(moves))
@@ -471,6 +490,7 @@ func (r *Reader) answerLater(ctx context.Context, session, address string, shown
 		r.mu.Unlock()
 		return true, nil
 	}
+
 	var option *core.AgentOption
 	for i, o := range shown.Options {
 		if fmt.Sprint(o.N) == reply.Pick {
@@ -487,6 +507,7 @@ func (r *Reader) answerLater(ctx context.Context, session, address string, shown
 	if said == "" {
 		return false, nil
 	}
+
 	r.mu.Lock()
 	partial := map[int]string{}
 	for k, v := range r.laterPart[id] {
@@ -498,8 +519,10 @@ func (r *Reader) answerLater(ctx context.Context, session, address string, shown
 		r.mu.Unlock()
 		return true, nil
 	}
+
 	r.mu.Unlock()
 	answers := make([]string, len(titles))
+
 	for i := range titles {
 		answers[i] = partial[i]
 	}

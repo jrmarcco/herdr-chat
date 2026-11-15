@@ -17,12 +17,14 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// 对话框：它在等你 ( spec §6.5 )。三条通路按优先级：agent 自己上报 ( hook /
-// 它的 API )，屏幕上画的编号菜单，无菜单的整屏。一个对话框一张卡；点卡片前
-// 先复核屏幕还是那个对话框——旧卡永远答不了长得像的新问题。
+// 对话框：它在等你。三条通路按优先级：
+// agent 自己上报 ( hook /它的 API )，屏幕上画的编号菜单，无菜单的整屏。
+// 一个对话框一张卡；点卡片前先复核屏幕还是那个对话框——旧卡永远答不了长得像的新问题。
+//
+// 采信一屏菜单的节奏：
+// blocked 到达的瞬间屏幕可能还没画完，要顶边框、且相隔DRAW_WAIT 的两次读到同一个 key，
+// 或读满 DRAW_TRIES 次才信。
 
-// 采信一屏菜单的节奏：blocked 到达的瞬间屏幕可能还没画完，要顶边框、且相隔
-// DRAW_WAIT 的两次读到同一个 key，或读满 DRAW_TRIES 次才信。
 const (
 	DrawTries   = 5
 	DrawWait    = 400 * time.Millisecond
@@ -62,8 +64,9 @@ func (e *Engine) dialogAt(message core.Message) (core.Dialog, bool) {
 	return d, ok
 }
 
-// dialogName：一个对话框的名字——有菜单用菜单 key；没有用状态词。postedDialog
-// 靠它一题一卡；发卡失败要忘记，让下一个事件 ( 或暂存的消息 ) 再发。
+// dialogName 一个对话框的名字——有菜单用菜单 key；没有用状态词。
+// postedDialog 靠它一题一卡；
+// 发卡失败要忘记，让下一个事件 ( 或暂存的消息 ) 再发。
 func dialogName(dialog core.Dialog, status hccli.Terminal) string {
 	if dialog.Menu != nil {
 		return dialog.Menu.Key
@@ -99,8 +102,8 @@ func (e *Engine) forgetDialog(k string, name string) {
 	}
 }
 
-// openCard 是每个终端仍在等的卡 ( state.openCards 持久化：重启后不重发、
-// 也不留一张没人认的按钮卡 )。
+// openCard 是每个终端仍在等的卡
+// ( state.openCards 持久化：重启后不重发、也不留一张没人认的按钮卡 )。
 func (e *Engine) openCardOf(k string) (state.OpenCard, bool) {
 	oc, ok := e.read().OpenCards[k]
 	return oc, ok
@@ -131,8 +134,8 @@ func (e *Engine) dropOpenCard(k string) {
 	e.write(st)
 }
 
-// restoreDialogs 在启动时把 state 里的 openCards 请回内存 ( postedDialog 也随之
-// 恢复，已答过的卡不会重发 )。
+// restoreDialogs 在启动时把 state 里的 openCards 请回内存
+// ( postedDialog 也随之恢复，已答过的卡不会重发 )。
 func (e *Engine) restoreDialogs() {
 	for k, oc := range e.read().OpenCards {
 		var dialog core.Dialog
@@ -159,7 +162,7 @@ func (e *Engine) closeCard(k string, done string) {
 	}
 }
 
-// dialogOf：从一屏文字做出对话框 ( 无菜单时正文是屏幕最后几行 )。
+// dialogOf 从一屏文字做出对话框 ( 无菜单时正文是屏幕最后几行 )。
 func dialogOf(statusWord string, screenText, footer string) core.Dialog {
 	menu := core.MenuOf(screenText)
 	title := NeedsTitle
@@ -175,8 +178,8 @@ func dialogOf(statusWord string, screenText, footer string) core.Dialog {
 	return d
 }
 
-// agentDialog 把 agent 自己上报的提问做成对话框；Menu.Own 留它的引用，
-// 点击沿原路回答。
+// agentDialog 把 agent 自己上报的提问做成对话框；
+// Menu.Own 留它的引用，点击沿原路回答。
 func agentDialog(d *core.AgentDialog, status hccli.Terminal) core.Dialog {
 	menu := &core.Menu{Key: d.Key, Multi: d.Multi, Text: d.Text, Framed: true, Cursor: 1, Own: &asks.Ref{ID: d.Key, Raw: d}}
 	for _, o := range d.Options {
@@ -220,8 +223,8 @@ func (e *Engine) askedNow(session, address string, record hccli.Terminal) core.D
 	return dialogOf(record.State(), screenText, "")
 }
 
-// dialogValue 是卡片的值：点击凭它找回终端与对话框 ( c 存当时的终端宽度，
-// resize 与换对话框分得开 )。
+// dialogValue 是卡片的值：
+// 点击凭它找回终端与对话框 ( c 存当时的终端宽度，resize 与换对话框分得开 )。
 func dialogValue(session, address string, dialog core.Dialog, cols int) core.DialogValue {
 	v := map[string]any{"s": session, "a": address}
 	if dialog.Menu != nil {
@@ -261,6 +264,7 @@ func valueOf(click core.Click) dialogValueParts {
 			}
 		}
 	}
+
 	if pick, ok := click.Value.(map[string]any); ok {
 		if p, ok := pick["pick"].(string); ok {
 			out.Pick = p
@@ -275,8 +279,9 @@ func valueOf(click core.Click) dialogValueParts {
 	return out
 }
 
-// stillAsks：终端是否仍在等这张卡的问题——blocked 着；或它的 hook 还在问
-// ( Codex 一边干活一边等 hook )；或不挡工作的提问 ( idle ) 还没开工。
+// stillAsks 终端是否仍在等这张卡的问题——blocked 着；
+// 或它的 hook 还在问 ( Codex 一边干活一边等 hook )；
+// 或不挡工作的提问 ( idle ) 还没开工。
 func (e *Engine) stillAsks(record hccli.Terminal, dialog core.Dialog) bool {
 	if record != nil && record.State() == stateBlocked {
 		return true
@@ -290,7 +295,7 @@ func (e *Engine) stillAsks(record hccli.Terminal, dialog core.Dialog) bool {
 	return record != nil && asks.AskOf(record) != ""
 }
 
-// postBlocked ( spec §6.5 总则 )：blocked 时的发卡入口。
+// postBlocked：blocked 时的发卡入口。
 //   - own：只信 agent 自己上报的 ( 它的 hook 刚问了 )，不读屏；
 //   - again：已发过也再发 ( 你在它等待时往房间打了字 )；
 //   - 屏幕通路要顶边框 + 两次读到同一个 key 才采信。
@@ -313,11 +318,13 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 			}
 		}
 	}
+
 	if dialog == nil && own {
 		return nil
 	}
+
 	if dialog == nil {
-		footer := "" // footer ( 屏幕来源标注 ) 随 M4 的 meter 一起来
+		footer := "" // footer ( 屏幕来源标注 ) 随 meter 一起来
 		screenText, _ := e.HC.ScreenTail(e.ctx, session, address, ScreenLines)
 		current := dialogOf(record.State(), screenText, footer)
 		for i := 0; i < DrawTries; i++ {
@@ -338,9 +345,11 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 		}
 		dialog = &current
 	}
+
 	k := e.keyOf(session, address)
-	// 读屏期间已在终端里答掉：没人在等，不发卡 ( agent 自己上报的除外——
-	// Codex 干着活等 hook，状态说了不算 )。
+
+	// 读屏期间已在终端里答掉：没人在等，不发卡
+	// ( agent 自己上报的除外—— // Codex 干着活等 hook，状态说了不算 )。
 	if dialog.Menu == nil || dialog.Menu.Own == nil {
 		if term, err := e.HC.GetTerminal(e.ctx, session, address); err == nil {
 			if s := term.State(); s != "" && s != stateBlocked {
@@ -349,6 +358,7 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 			}
 		}
 	}
+
 	name := dialogName(*dialog, record)
 	if !e.claimDialog(k, *dialog, record) && !again {
 		return nil
@@ -361,6 +371,7 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 	if dialog.Menu != nil {
 		options = len(dialog.Menu.Options)
 	}
+
 	xlog.For("engine").Info("对话框卡片发出", "session", session, "address", address, "options", options)
 	return nil
 }
@@ -407,6 +418,7 @@ func (e *Engine) sendBlocked(session, address string, record hccli.Terminal, k s
 		_ = e.Chat.Ring(e.ctx, k, msg, "⚠️ needs you")
 		return nil
 	}
+
 	cols := 0
 	if c, ok := record["cols"].(float64); ok {
 		cols = int(c)
@@ -420,10 +432,12 @@ func (e *Engine) sendBlocked(session, address string, record hccli.Terminal, k s
 	if message == "" {
 		return fmt.Errorf("the room for its card is gone")
 	}
+
 	e.remember(message, dialog)
 	e.setOpenCard(k, message, dialog)
 	e.pinIfRoom(k, message)
 	_ = e.Chat.Ring(e.ctx, k, message, "⚠️ needs you")
+
 	// 卡片在路上时已答掉：没人会再关它，现在就关。
 	var live hccli.Terminal
 	if v := e.viewOf(session); v != nil {
@@ -445,8 +459,8 @@ func (e *Engine) pinIfRoom(k string, msg core.Message) {
 	}
 }
 
-// pickKeys：选一个选项要按的键——数字；带预览框的问题不吃数字，从光标用
-// 方向键走到它，再 Enter。
+// pickKeys 选一个选项要按的键——数字；
+// 带预览框的问题不吃数字，从光标用方向键走到它，再 Enter。
 func pickKeys(menu *core.Menu, option core.MenuOption) []string {
 	if !menu.Beside {
 		return []string{fmt.Sprint(option.N)}
@@ -476,15 +490,30 @@ func answeredToast(done string) core.ActionResult {
 	return core.ActionResult{Toast: done, Card: &core.Look{Title: DoneTitle, Tone: core.ToneGood, Markdown: done}}
 }
 
-// onAction：聊天里点了一下卡片的按钮。先复核 ( 屏幕还是那张卡的问题、选项
-// 没变 ) 才按键；多选在卡上本地勾选，Next 一次性把差异按出去。
+// onAction 聊天里点了一下卡片的按钮。
+// 先复核 ( 屏幕还是那张卡的问题、选项没变 ) 才按键；
+// 多选在卡上本地勾选，Next 一次性把差异按出去。
 func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 	started := time.Now()
 	v := valueOf(click)
+
+	// /clean 的确认卡：不走终端 ( 没有 s/a 对应的终端，点了直接执行或取消 )。
+	if v.K == cleanKey {
+		if v.Pick == "1" {
+			result := e.doClean()
+			return core.ActionResult{
+				Toast: "✔ Cleaned.",
+				Card:  &core.Look{Title: DoneTitle, Tone: core.ToneDone, Markdown: result},
+			}, nil
+		}
+		return answeredToast("Cancelled. Nothing was deleted."), nil
+	}
+
 	shown, known := e.dialogAt(click.Message)
 	if !known {
 		shown = core.Dialog{Title: NeedsTitle, DoneTitle: DoneTitle}
 	}
+
 	// 多选框：只在卡上翻勾，立刻回应；Next 才真正发送。
 	if shown.Menu != nil && shown.Menu.Multi && v.Pick != "" && v.Pick != "tab" && v.Pick != "esc" {
 		n, _ := strconv.Atoi(v.Pick)
@@ -508,6 +537,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			}
 		}
 	}
+
 	if v.S == "" || v.A == "" {
 		return core.ActionResult{Toast: "This card is not a terminal's."}, nil
 	}
@@ -521,10 +551,12 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 		return core.ActionResult{Toast: core.UserWords(err)}, nil
 	}
 	k := e.keyOf(v.S, v.A)
+
 	// 通路 A：agent 自己上报的卡，沿它的 API 回答，不碰终端按键。
 	if shown.Menu != nil && shown.Menu.Own != nil {
 		return e.answerOwn(click, v, record, term, k)
 	}
+
 	// 通路 C：读屏复核。
 	screenText, _ := e.HC.ScreenTail(e.ctx, v.S, v.A, ScreenLines)
 	var menu *core.Menu
@@ -534,13 +566,15 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 	if menu == nil || menu.Key != v.K {
 		xlog.For("engine").Info("点击未按键：对话框已变或无人等待", "session", v.S, "address", v.A, "card", v.K)
 		if menu == nil {
-			return answeredToast("It no longer waits on this."), nil
+			e.closeClickCard(click, shown, "It no longer waits on this.")
+			return core.ActionResult{Toast: "It no longer waits on this.", Card: doneLook(shown, "It no longer waits on this.")}, nil
 		}
-		// 手里的卡变成屏幕现在问的，请再点一次。绝不另发新卡：新卡会被
-		// "已发过" 拦下，那就没人可答、你的消息全干等。
+		// 手里的卡变成屏幕现在问的，请再点一次。
+		// 绝不另发新卡：新卡会被 "已发过" 拦下，那就没人可答、你的消息全干等。
 		now := dialogOf(term.State(), screenText, shown.Footer)
 		if now.Menu == nil {
-			return answeredToast("It no longer waits on this."), nil
+			e.closeClickCard(click, shown, "It no longer waits on this.")
+			return core.ActionResult{Toast: "It no longer waits on this.", Card: doneLook(shown, "It no longer waits on this.")}, nil
 		}
 		if oc, ok := e.openCardOf(k); ok && oc.Message != string(click.Message) {
 			e.closeCard(k, "It moved on; see the next card.")
@@ -556,9 +590,11 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			Value: dialogValue(v.S, v.A, now, termCols(term)),
 		}, nil
 	}
+
 	if oc, ok := e.openCardOf(k); ok && oc.Message == string(click.Message) {
 		e.dropOpenCard(k)
 	}
+
 	var picked string
 	switch {
 	case v.Pick == pickTab && shown.Menu.Multi:
@@ -586,15 +622,17 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 				}
 			}
 			if *o.Checked != screenHas {
-				if err := e.HC.Keys(e.ctx, v.S, v.A, []string{fmt.Sprint(o.N)}); err != nil {
-					return core.ActionResult{Toast: core.UserWords(err)}, nil
+				if kerr := e.HC.Keys(e.ctx, v.S, v.A, []string{fmt.Sprint(o.N)}); kerr != nil {
+					return core.ActionResult{Toast: core.UserWords(kerr)}, nil
 				}
 				e.sleep(BoxGap)
 			}
 		}
-		if err := e.HC.Keys(e.ctx, v.S, v.A, []string{"tab"}); err != nil {
-			return core.ActionResult{Toast: core.UserWords(err)}, nil
+
+		if kerr := e.HC.Keys(e.ctx, v.S, v.A, []string{"tab"}); kerr != nil {
+			return core.ActionResult{Toast: core.UserWords(kerr)}, nil
 		}
+
 		var ticked []string
 		for _, o := range wanted.Options {
 			if o.Checked != nil && *o.Checked {
@@ -607,8 +645,8 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			picked = strings.Join(ticked, ", ")
 		}
 	case v.Pick == pickEsc || v.Pick == pickTab:
-		if err := e.HC.Keys(e.ctx, v.S, v.A, []string{v.Pick}); err != nil {
-			return core.ActionResult{Toast: core.UserWords(err)}, nil
+		if kerr := e.HC.Keys(e.ctx, v.S, v.A, []string{v.Pick}); kerr != nil {
+			return core.ActionResult{Toast: core.UserWords(kerr)}, nil
 		}
 		if v.Pick == pickEsc {
 			picked = "Esc pressed"
@@ -624,6 +662,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 				break
 			}
 		}
+
 		if option == nil || option.Label != v.Label {
 			xlog.For("engine").Info("点击未按键：选项已变", "session", v.S, "address", v.A, "pick", v.Pick)
 			return answeredToast("The options changed; nothing was pressed."), nil
@@ -633,36 +672,52 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			if text == "" {
 				return core.ActionResult{Toast: "Type your answer first."}, nil
 			}
-			if err := e.answerFree(v.S, v.A, menu, text); err != nil {
-				return core.ActionResult{Toast: core.UserWords(err)}, nil
+			if kerr := e.answerFree(v.S, v.A, menu, text); kerr != nil {
+				return core.ActionResult{Toast: core.UserWords(kerr)}, nil
 			}
 			picked = text
 		} else {
-			if err := e.HC.Keys(e.ctx, v.S, v.A, pickKeys(menu, *option)); err != nil {
-				return core.ActionResult{Toast: core.UserWords(err)}, nil
+			if kerr := e.HC.Keys(e.ctx, v.S, v.A, pickKeys(menu, *option)); kerr != nil {
+				return core.ActionResult{Toast: core.UserWords(kerr)}, nil
 			}
 			picked = fmt.Sprintf("%d. %s", option.N, option.Label)
 		}
 	}
+
 	xlog.For("engine").Info("点击已按键", "session", v.S, "address", v.A, "picked", picked)
+
+	// 按完键对话框已不在 ( 答掉了 )：
+	// 卡片要收场——登记在按键前已摘，"离开 blocked"的关卡不会再来补这一刀 ( 教训记在这 )。
+	closeIfAnswered := func(term hccli.Terminal, err error) {
+		if err != nil || term.State() == stateBlocked {
+			return
+		}
+		if err := e.Chat.CloseDialog(e.ctx, click.Message, shown, "✔ "+picked); err != nil {
+			xlog.For("engine").Warn("对话框卡片关闭失败", "message", string(click.Message), "error", err)
+		}
+	}
 
 	// 慢机器：先答点击，下一步的卡异步补。
 	if time.Since(started) > ClickBudget {
 		e.later(v.S, v.A, "dialog", func() error {
 			e.sleep(KeySettle)
-			if term, err := e.HC.GetTerminal(e.ctx, v.S, v.A); err == nil && term.State() == stateBlocked {
+			aterm, aerr := e.HC.GetTerminal(e.ctx, v.S, v.A)
+			if aerr == nil && aterm.State() == stateBlocked {
 				rec, ok := e.viewOf(v.S).Get(v.A)
 				if !ok {
 					rec = record
 				}
 				return e.postBlocked(v.S, v.A, rec, false, false)
 			}
+			closeIfAnswered(aterm, aerr)
 			return nil
 		})
-		return answeredToast("✔ " + picked), nil
+		return core.ActionResult{Toast: "✔ " + picked, Card: doneLook(shown, "✔ "+picked)}, nil
 	}
+
 	e.sleep(KeySettle)
-	if term, err := e.HC.GetTerminal(e.ctx, v.S, v.A); err == nil && term.State() == stateBlocked {
+	term, gerr := e.HC.GetTerminal(e.ctx, v.S, v.A)
+	if gerr == nil && term.State() == stateBlocked {
 		text, _ := e.HC.ScreenTail(e.ctx, v.S, v.A, ScreenLines)
 		next := dialogOf(term.State(), text, shown.Footer)
 		if next.Menu != nil && (next.Menu.Key == v.K || e.claimDialog(k, next, term)) {
@@ -681,6 +736,12 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			e.setOpenCard(k, click.Message, next)
 			return core.ActionResult{Toast: "✔ " + picked, Card: &core.Look{Title: next.Title, Tone: core.ToneNeeds, Markdown: escapeMarkdown(next.Markdown)}, Value: dialogValue(v.S, v.A, next, termCols(term))}, nil
 		}
+
+		// 状态还说着 blocked、屏幕已没有菜单：
+		// 答案多半已进去，先把这张卡收了 ( 状态字段翻得慢，等它就错过关卡 )；
+		// 真还等着，补发会作为新卡。
+		e.closeClickCard(click, shown, "✔ "+picked)
+
 		// 还在等，等的东西没有菜单：hc 不会再发 turn，补发。
 		rec, ok := e.viewOf(v.S).Get(v.A)
 		if !ok {
@@ -690,7 +751,16 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			return e.postBlocked(v.S, v.A, rec, false, false)
 		})
 	}
-	return answeredToast("✔ " + picked), nil
+	closeIfAnswered(term, gerr)
+	return core.ActionResult{Toast: "✔ " + picked, Card: doneLook(shown, "✔ "+picked)}, nil
+}
+
+// closeClickCard 点击路径的关卡：手上有卡片自己的 message，不依赖登记
+// ( 登记可能在按键前就被摘掉，"离开 blocked"的关卡从此扑空 )。
+func (e *Engine) closeClickCard(click core.Click, d core.Dialog, done string) {
+	if err := e.Chat.CloseDialog(e.ctx, click.Message, d, done); err != nil {
+		xlog.For("engine").Warn("对话框卡片关闭失败", "message", string(click.Message), "error", err)
+	}
 }
 
 func (e *Engine) openCardExists(k string) bool {
@@ -709,8 +779,10 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 	now, err := dialoger.Dialog(e.ctx, v.S, v.A)
 	if err != nil || now == nil {
 		// 点击失败如实告知，不进重试。
-		return answeredToast("It no longer waits on this."), nil //nolint:nilerr // err 已折进"没在等"的结论
+		//nolint:nilerr // err 已折进"没在等"的结论。
+		return answeredToast("It no longer waits on this."), nil
 	}
+
 	asked := agentDialog(now, term)
 	if now.Key != v.K {
 		xlog.For("engine").Info("点击未回答：它问的已是另一个问题", "session", v.S, "address", v.A, "now", now.Key)
@@ -728,6 +800,7 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 			Value: dialogValue(v.S, v.A, asked, termCols(term)),
 		}, nil
 	}
+
 	var picked string
 	var reply core.Reply
 	switch {
@@ -779,6 +852,7 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 			picked = fmt.Sprintf("%d. %s", option.N, option.Label)
 		}
 	}
+
 	answerer, ok := reader.(readers.Answerer)
 	if !ok {
 		return answeredToast("It no longer waits on this."), nil
@@ -786,11 +860,18 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 	took, err := answerer.Answer(e.ctx, v.S, v.A, asked, reply)
 	if err != nil || !took {
 		xlog.For("engine").Warn("agent 没有收下答案", "session", v.S, "address", v.A, "error", err)
-		return core.ActionResult{Toast: reader.App() + " did not take it; nothing changed. Tap again, or answer in herdr-app."}, nil // 点击失败已如实告知，不进重试
+		// 点击失败已如实告知，不进重试。
+		return core.ActionResult{Toast: reader.App() + " did not take it; nothing changed. Tap again, or answer in herdr-app."}, nil
 	}
 	if oc, has := e.openCardOf(k); has && oc.Message == string(click.Message) {
 		e.dropOpenCard(k)
+		// 卡片本体要收场：去按钮、写结论。
+		// 只摘登记不编辑的话，卡永远停在提问的样子 ( 摘了登记，"离开 blocked"的关卡也不会再补这一刀 )。
+		if err := e.Chat.CloseDialog(e.ctx, click.Message, asked, "✔ "+picked); err != nil {
+			xlog.For("engine").Warn("对话框卡片关闭失败", "message", string(click.Message), "error", err)
+		}
 	}
+
 	xlog.For("engine").Info("点击已沿 agent API 回答", "session", v.S, "address", v.A, "picked", picked)
 	e.sleep(KeySettle)
 	// 它的下一题 ( 同一表的，或新的 ) 接管这张卡。
@@ -801,9 +882,26 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 		e.mu.Unlock()
 		e.remember(click.Message, nd)
 		e.setOpenCard(k, click.Message, nd)
-		return core.ActionResult{Toast: "✔ " + picked, Card: &core.Look{Title: nd.Title, Tone: core.ToneNeeds, Markdown: escapeMarkdown(nd.Markdown)}, Value: dialogValue(v.S, v.A, nd, termCols(term))}, nil
+		return core.ActionResult{
+			Toast: "✔ " + picked,
+			Card:  &core.Look{Title: nd.Title, Tone: core.ToneNeeds, Markdown: escapeMarkdown(nd.Markdown)},
+			Value: dialogValue(v.S, v.A, nd, termCols(term)),
+		}, nil
 	}
-	return answeredToast("✔ " + picked), nil
+
+	return core.ActionResult{Toast: "✔ " + picked, Card: doneLook(asked, "✔ "+picked)}, nil
+}
+
+// doneLook 是关卡后的样子：灰头、原文、一行结论——随点击的回调响应整卡
+// 换上 ( 按钮随之消失；PATCH 换不掉交互组件，只有这条路 )。
+func doneLook(d core.Dialog, done string) *core.Look {
+	md := d.Markdown
+	if md == "" {
+		md = done
+	} else {
+		md += "\n\n" + done
+	}
+	return &core.Look{Title: DoneTitle, Tone: core.ToneDone, Markdown: md}
 }
 
 // tickList 把 {n: on} 变成按编号升序的按键序列 ( map 无序，顺序要自己定 )。

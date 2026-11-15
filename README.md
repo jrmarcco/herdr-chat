@@ -1,6 +1,6 @@
-# herdrchat Go 重写资料包
+# herdrchat（Go 重写）
 
-基于对 herdrchat v1.10.2（Node.js 原版）全量源码分析，为 Go 语言重写准备的文档集。**重写已开工**：进度见 [PROGRESS.md](PROGRESS.md)（M1 骨架已完成，测试全绿）。
+herdrchat 的 Go 重写：单二进制 `herdrchat`，把每个 hc 终端镜像进飞书、可点按钮回答 agent 的提问。进度见 [PROGRESS.md](PROGRESS.md)。
 
 | 文档 | 用途 |
 |---|---|
@@ -11,20 +11,22 @@
 
 四份文档配合使用：**FINAL_PLAN 定"怎么执行、增强并入哪"，spec 定"重写成什么样"，optimization 定"哪里做得更好"，reuse 定"哪些直接拿来用"**。
 
-## 附带资产（已从原版复制进本目录）
+## 工程现状（Go-only）
+
+重写工程只依赖 Go（运行时唯一外部依赖：飞书官方 SDK）。原版 Node 资产已完成使命：
 
 ```
-assets/            可直接复用的原版文件
-  hooks/ask.sh       PermissionRequest hook（逐字节复用）
-  skills/herdrchat/  Skill 包（SKILL.md + 4 份 references）
-  scripts/           smoke.sh / wait-release.sh
-  docs/              README×2 / guide / architecture（更新后即用）
-  ci/                3 个 GitHub workflows
-  config.env.example / .releaserc.json / LICENSE / CHANGELOG.md
-
-testdata/
-  node-tests/       原版全部 23 个测试文件（含 fakes.mjs）
-                     样本数据 + 期望断言 = Go 重写的 golden 对拍锚点
+cmd/herdrchat        CLI 入口；internal/cli 各子命令（run/start/status/pair/update…）
+internal/            engine、readers×3、chats/feishu、hccli、hooks、service、cli…
+docs/                README×2 / guide / architecture（随 M8 更新为 Go 版说法）
+skills/herdrchat/    Skill 包（SKILL.md + 4 份 references）
+THIRD-PARTY/         上游归属素材（zhangxiangliang 的 LICENSE/CHANGELOG；M8 出正式 NOTICE）
+testdata/screens/    菜单解析语料（借自 cobanov，见 THIRD-PARTY/）
+.goreleaser.yaml     发布链路（tag v* → release；`herdrchat update` 的下载源）
+.github/workflows/   ci.yml（vet+lint+test）与 release.yml（goreleaser）
 ```
 
-各文件用途与复用方式详见 [reuse.md](reuse.md) 的"目录地图"。
+原版的 hook 脚本（`internal/hooks/ask.sh`，逐字节）与示例配置
+（`internal/cli/config.env.example`）以包内嵌副本为唯一正本；原版 Node 测试
+（`testdata/node-tests/`）与 npm 打包/CI 已移除——全部行为以 Go 测试为准
+（转录记录见 PROGRESS.md 各里程碑），出处与归属见 [THIRD-PARTY/](THIRD-PARTY/)。

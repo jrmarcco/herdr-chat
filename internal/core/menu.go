@@ -1,7 +1,7 @@
 package core
 
 import (
-	"crypto/sha1" //nolint:gosec // G505: 与 Node 版 keyOf 一致的对话框身份哈希，非密码学用途
+	"crypto/sha1" //nolint:gosec // G505: 对话框身份哈希，非密码学用途
 	"encoding/hex"
 	"fmt"
 	"regexp"
@@ -9,15 +9,15 @@ import (
 	"strings"
 )
 
-// 屏幕菜单解析 ( spec §6.5.1，正则照抄原版 lib/core/menu.mjs )：程序被挡在
-// 屏幕上画的编号菜单——Claude Code 的授权与提问、Codex 的审批——从屏幕文字里
-// 读出选项，让聊天里的按钮代替按键。
+// 屏幕菜单解析：
+// 程序被挡在屏幕上画的编号菜单 —— Claude Code 的授权与提问、
+// Codex 的审批 —— 从屏幕文字里读出选项，让聊天里的按钮代替按键。
 //
 // 屏幕上最后一段 1、2、3… 连续编号就是菜单，选项行之间的行 ( 描述 ) 跳过；
-// 顶边框 ( 一行 ─ ) 之上是对话框的正文。身份 key 从顶边框到最后一个选项做
-// 哈希，剔除光标符、勾选标记与预览框——同一个对话框换一种折行 ( 终端 resize )
-// 还是同一个，旧卡片答不了长得像的新对话框。
-
+// 顶边框 ( 一行 ─ ) 之上是对话框的正文。
+// 身份 key 从顶边框到最后一个选项做哈希，剔除光标符、
+// 勾选标记与预览框——同一个对话框换一种折行 ( 终端 resize ) 还是同一个，
+// 旧卡片答不了长得像的新对话框。
 var (
 	menuOption     = regexp.MustCompile(`^\s*(?:[❯›]\s*)?(\d{1,2})\.\s+(?:\[(.)\]\s+)?(.*\S)\s*$`)
 	menuCursor     = regexp.MustCompile(`[❯›]`)
@@ -36,16 +36,17 @@ var (
 // menuTextLines 是无顶边框时向上取的行数。
 const menuTextLines = 15
 
-// ownPart 拿到一个选项行的"自己那部分"：预览框 ( beside 模式下画在选项右侧 )
-// 既不算选项文字也不算 key；多问题对话框的左框线也拿掉。
+// ownPart 拿到一个选项行的"自己那部分"：
+// 预览框 ( beside 模式下画在选项右侧 ) 既不算选项文字也不算 key；
+// 多问题对话框的左框线也拿掉。
 func ownPart(line string) string {
 	line = menuBeside.ReplaceAllString(line, "")
 	return menuLeftBorder.ReplaceAllString(line, "$1")
 }
 
-// topOf 找对话框的顶：选项区上方最近的顶边框；没有则最近的 Codex 条目行
-// ( 也是已知边缘 )；再没有就取选项上方 menuTextLines 行 ( framed=false，
-// 不知是不是对话框 )。
+// topOf 找对话框的顶：
+// 选项区上方最近的顶边框；没有则最近的 Codex 条目行 ( 也是已知边缘 )；
+// 再没有就取选项上方 menuTextLines 行 ( framed=false，不知是不是对话框 )。
 func topOf(lines []string, first int) (top int, framed bool) {
 	top = first
 	for top > 0 && !menuBorder.MatchString(lines[top]) {
@@ -65,8 +66,9 @@ func topOf(lines []string, first int) (top int, framed bool) {
 	return 0, false
 }
 
-// keyOf 算对话框的身份：从顶到最后选项，去光标符、去选项前导勾选框、去
-// 勾选标记，以空格连接 ( 不用换行：同一对话框换个宽度折行不同，仍是同一个 )。
+// keyOf 算对话框的身份：
+// 从顶到最后选项，去光标符、去选项前导勾选框、去勾选标记，
+// 以空格连接 ( 不用换行：同一对话框换个宽度折行不同，仍是同一个 )。
 func keyOf(lines []string, top, last int) string {
 	var parts []string
 	for _, l := range lines[top : last+1] {
@@ -77,7 +79,9 @@ func keyOf(lines []string, top, last int) string {
 	}
 	body := strings.Join(parts, " ")
 	body = strings.Join(strings.Fields(body), " ")
-	sum := sha1.Sum([]byte(body)) //nolint:gosec // G401: 对话框身份哈希沿用 Node 版算法
+
+	//nolint:gosec // G401: 对话框身份哈希，非安全用途。
+	sum := sha1.Sum([]byte(body))
 	return hex.EncodeToString(sum[:])[:12]
 }
 
@@ -108,7 +112,8 @@ func MenuOf(screenText string) *Menu {
 			continue
 		}
 		opt := MenuOption{N: n, Label: m[3]}
-		if m[2] != "" { // [x] / [ ]：勾选框
+		if m[2] != "" {
+			// [x] / [ ]：勾选框。
 			checked := m[2] != " "
 			opt.Checked = &checked
 		}
@@ -132,6 +137,7 @@ func MenuOf(screenText string) *Menu {
 			out.Free = &free
 		}
 	}
+
 	// 带预览框的问题不吃数字键 ( 它的按键说明是 "↑/↓ to navigate" )：
 	// 选项从光标 ( ❯ ) 出发用方向键走到，再 Enter。
 	out.Beside = false
@@ -162,8 +168,8 @@ func dialogText(lines []string, top, first int) string {
 		}
 		kept = append(kept, strings.TrimSpace(l))
 	}
-	// Node 的 filter 不去空行中间的——正文里的空行保留 ( 用例 colors 的 text
-	// 两行之间没有空行；这里与 Node 一致：只滤 RULE，join 时保留)。
+
+	// 正文里的空行保留 ( 对话框正文本身可以有空行；只滤 RULE，join 时保留 )。
 	return strings.Join(kept, "\n")
 }
 

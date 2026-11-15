@@ -7,10 +7,9 @@ import (
 	"time"
 )
 
-// 帖子 footer 里 harness 与模型之外的话：git 分支、上下文占了多少、账号限额
-// ( 移植自原版 lib/core/meter.mjs )。要花一条命令才能知道的数 ( 模型的上下文
-// 窗口、账号的 5 小时/7 天限额 ) 按"上次已知"立即给出：超过时长就在后台再问
-// 一次，发帖只在第一次等它几秒 ( KnownSoon )，之后从不等。
+// 帖子 footer 里 harness 与模型之外的话：
+// git 分支、上下文占了多少、账号限额要花一条命令才能知道的数 ( 模型的上下文窗口、账号的 5 小时/7 天限额 ) 按"上次已知"立即给出：
+// 超过时长就在后台再问一次，发帖只在第一次等它几秒 ( KnownSoon )，之后从不等。
 
 // Meter 是"上次已知"的缓存：键 -> 值、读到的时刻、是否正在问。
 type Meter struct {
@@ -34,8 +33,10 @@ func (m *Meter) ForgetAll() {
 	m.seen = map[string]meterEntry{}
 }
 
-// LastKnown 给出键上次已知的值 ( 从未问过为零值 )，超过 maxAge 就在后台再问
-// 一次；问失败保留旧值，同样隔 maxAge 才再试。ask 在锁外跑。
+// LastKnown 给出键上次已知的值 ( 从未问过为零值 )，
+// 超过 maxAge 就在后台再问一次；
+// 问失败保留旧值，同样隔 maxAge 才再试。
+// ask 在锁外跑。
 func (m *Meter) LastKnown(key string, maxAge time.Duration, ask func() (any, error)) any {
 	m.mu.Lock()
 	entry, ok := m.seen[key]

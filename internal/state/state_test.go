@@ -8,25 +8,24 @@ import (
 	"testing"
 )
 
-func TestRoundTripKeepsNodeShapes(t *testing.T) {
-	// Node 版写出的 JSON ( 连同精确的字段类型：毫秒整数、ISO 字符串 ) 必须能
-	// 无损读入并写回。
+func TestRoundTripKeepsExistingShapes(t *testing.T) {
+	// 既有 state.json 的形状 ( 连同精确的字段类型：毫秒整数、ISO 字符串 ) 必须能无损读入并写回。
 	const nodeJSON = `{
-  "chats": {"default|t3": {"chat": "oc_1", "name": "api / claude", "session": "default", "tab": "tb7", "ended": false}},
-  "cursors": {"default|t3": {"at": "2026-11-14T10:00:00.000Z", "seen": [["a", "2026-11-14T09:59:00.000Z"]], "reader": "claude-code", "file": "~/.claude/projects/p/s.jsonl", "meta": {"model": "opus"}, "live": {"message": "m1", "text": "working", "footer": "claude · main"}}},
-  "reacts": {"default|t3": [{"message": "m2", "reaction": "THINKING", "at": 1731580000000}]},
-  "waiting": {"default|t3": [{"where": "api / claude", "message": "m3", "session": "default", "address": "t3", "text": "go on"}]},
-  "pinned": {"default|t3": "m4"},
-  "overview": {"message": "m5"},
-  "buttons": {"b1": {"value": {"pick": "1"}, "labels": {"1": "Yes"}}},
-  "spaces": {"api": {"icon": 7322096}},
-  "feishuRead": {"oc_1": 1731580000000},
-  "telegramOffset": 12345,
-  "down": {"since": 1731580000000, "said": 1731580000000, "why": "boom"},
-  "pairing": {"code": "123456", "until": 1731580900000, "tries": 1}
-}`
-	dir := t.TempDir()
-	path := filepath.Join(dir, "state.json")
+		"chats": {"default|t3": {"chat": "oc_1", "name": "api / claude", "session": "default", "tab": "tb7", "ended": false}},
+		"cursors": {"default|t3": {"at": "2026-11-14T10:00:00.000Z", "seen": [["a", "2026-11-14T09:59:00.000Z"]], "reader": "claude-code", "file": "~/.claude/projects/p/s.jsonl", "meta": {"model": "opus"}, "live": {"message": "m1", "text": "working", "footer": "claude · main"}}},
+		"reacts": {"default|t3": [{"message": "m2", "reaction": "THINKING", "at": 1731580000000}]},
+		"waiting": {"default|t3": [{"where": "api / claude", "message": "m3", "session": "default", "address": "t3", "text": "go on"}]},
+		"pinned": {"default|t3": "m4"},
+		"overview": {"message": "m5"},
+		"buttons": {"b1": {"value": {"pick": "1"}, "labels": {"1": "Yes"}}},
+		"spaces": {"api": {"icon": 7322096}},
+		"feishuRead": {"oc_1": 1731580000000},
+		"telegramOffset": 12345,
+		"down": {"since": 1731580000000, "said": 1731580000000, "why": "boom"},
+		"pairing": {"code": "123456", "until": 1731580900000, "tries": 1}
+	}`
+	dir := t.TempDir
+	path := filepath.Join(dir(), "state.json")
 	if err := os.WriteFile(path, []byte(nodeJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +70,7 @@ func TestMissingFileIsEmpty(t *testing.T) {
 }
 
 func TestCorruptFileIsKeptAsideAndReported(t *testing.T) {
-	// optimization D4：损坏的 state.json 绝不静默重置——房间会无声无息地丢。
+	// 损坏的 state.json 绝不静默重置——房间会无声无息地丢。
 	// 它被备份并如实上报。
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
@@ -111,13 +110,14 @@ func TestWriteIsAtomicAndPrivate(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v, want 600", info.Mode().Perm())
 	}
-	// nil 的 Seen 序列化为 [] ( Node 形状 )，而不是 null。
+	// nil 的 Seen 序列化为 [] ( 兼容既有形状 )，而不是 null。
 	st := Empty()
 	st.Cursors = map[string]Cursor{"k": {}}
 	if err := store.Write(st); err != nil {
 		t.Fatal(err)
 	}
-	text, _ := os.ReadFile(path) //nolint:gosec // G304: 测试临时目录内的文件
+	//nolint:gosec // G304: 测试临时目录内的文件。
+	text, _ := os.ReadFile(path)
 	if !strings.Contains(string(text), `"seen": []`) {
 		t.Errorf("seen must marshal as []: %s", text)
 	}

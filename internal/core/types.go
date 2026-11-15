@@ -4,10 +4,9 @@ import (
 	"time"
 )
 
-// 引擎、chat app 与 reader 共享的领域类型 ( spec §3 )。Room 与 Message 是
-// chat app 自己的 id，原样保存：core 绝不往里看。
-
-// Room 是 chat app 的房间 id ( 飞书群的 chat_id、Telegram topic 的 thread id )。
+// 引擎、chat app 与 reader 共享的领域类型。
+// Room 与 Message 是 chat app 自己的 id，原样保存：core 绝不往里看。
+// // Room 是 chat app 的房间 id ( 飞书群的 chat_id )。
 type Room string
 
 // Message 是 chat app 的消息 id。
@@ -47,10 +46,12 @@ type MenuOption struct {
 	Checked *bool
 }
 
-// Menu 是从屏幕上读出的对话框编号菜单 ( spec §6.5.1 )：最后一段 1、2、3…
-// 连续编号的选项，上方是对框自己的话。Key 是对话框的身份 ( 一个哈希 )：旧
-// 卡片永远答不了长得像的新对话框。Own 在 agent 自己上报对话框时 ( hook 通路 )
-// 携带它的原始引用，让点击沿原路回去而不是穿过屏幕。
+// Menu 是从屏幕上读出的对话框编号菜单：最后一段 1、2、3…
+// 连续编号的选项，上方是对框自己的话。
+//
+// Key 是对话框的身份 ( 一个哈希 )：旧卡片永远答不了长得像的新对话框。
+// Own 在 agent 自己上报对话框时 ( hook 通路 ) 携带它的原始引用，
+// 让点击沿原路回去而不是穿过屏幕。
 type Menu struct {
 	Key     string
 	Options []MenuOption
@@ -72,8 +73,9 @@ type Dialog struct {
 	Footer    string
 }
 
-// DialogValue 是对话框卡片发出后携带的值，让点击知道自己回答的是哪个对话
-// 框 ( 菜单的 key，或 agent 的原始引用 )。chat app 对它保持不透明。
+// DialogValue 是对话框卡片发出后携带的值，
+// 让点击知道自己回答的是哪个对话框 ( 菜单的 key，或 agent 的原始引用 )。
+// chat app 对它保持不透明。
 type DialogValue any
 
 // Item roles.
@@ -83,11 +85,11 @@ const (
 	RoleTool  = "tool"
 	RoleImage = "image"
 	RoleMeta  = "meta"
-	RoleCard  = "card" // FINAL_PLAN §2.B: a subagent / workflow card
+	RoleCard  = "card" // B: a subagent / workflow card
 )
 
-// Card 是会话里单独成卡的一次委托：子代理或工作流、被交代了什么、
-// 现在怎样。
+// Card 是会话里单独成卡的一次委托：
+// 子代理或工作流、被交代了什么、现在怎样。
 type Card struct {
 	Kind    string // "subagent" | "workflow" | "phase"
 	Title   string
@@ -107,8 +109,8 @@ type Limit struct {
 	Used float64
 }
 
-// Item 是 reader 从 agent 自己的记录里取出的一条：你说的、它答的、一行
-// 工具、一张图，或只喂给 footer 的 meta。ID 稳定 ( 游标去重用 )；
+// Item 是 reader 从 agent 自己的记录里取出的一条：
+// 你说的、它答的、一行工具、一张图，或只喂给 footer 的 meta。ID 稳定 ( 游标去重用 )；
 // End 标记 turn 的最后一条回答。
 type Item struct {
 	Role     string
@@ -177,6 +179,8 @@ type Incoming struct {
 	Message Message
 	Text    string
 	Images  [][]byte
+	// Sender 是发消息的人在这个 chat app 里的 id ( 配对时它就成了 owner )。
+	Sender string
 }
 
 // Click 是卡片上的一次按钮点击：卡片的值、所在消息，以及卡片带输入框时
@@ -187,9 +191,9 @@ type Click struct {
 	Answer  string
 }
 
-// ActionResult 是点击立刻给出的回应 ( 飞书要求 3 秒内应答 )：一条 toast，
-// 也许还有卡片的下一副样子；Value 是刷新后卡片携带的值 ( 下一次点击凭它
-// 找回对话框 )。
+// ActionResult 是点击立刻给出的回应 ( 飞书要求 3 秒内应答 )：
+// 一条 toast，也许还有卡片的下一副样子；
+// Value 是刷新后卡片携带的值 ( 下一次点击凭它找回对话框 )。
 type ActionResult struct {
 	Toast string
 	Card  *Look

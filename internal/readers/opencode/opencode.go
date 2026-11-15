@@ -1,15 +1,21 @@
-// Package opencode 是 OpenCode 的 reader ( hc status app "opencode" )，走它自己的
-// API：CLI `opencode api <operation>` 问的是 OpenCode 的后台服务，它自己登录。
+// Package opencode 是 OpenCode 的 reader ( hc status app "opencode" )，
+// 走它自己的API：
+// CLI `opencode api <operation>` 问的是 OpenCode 的后台服务，它自己登录。
 // 这里不读它的数据库、不读它的屏——OpenCode 升级只要 API 还在，这就还能用。
 //
-//	哪个会话：该终端目录下的会话 ( session.list )，活跃的 ( session.active )
-//	优先，否则更新最近的。
-//	条目 ( session.message.list )：you 是 user 消息；ai 是 assistant 消息的
-//	text 部件 ( 后面跟着一条 "idle" 消息的那条标 end，turn 结束；reasoning 不取 )；
+//	哪个会话：
+//	该终端目录下的会话 ( session.list )，活跃的 ( session.active ) 优先，否则更新最近的。
+//
+//	条目 ( session.message.list )：
+//	you 是 user 消息；
+//	ai 是 assistant 消息的 text 部件 ( 后面跟着一条 "idle" 消息的那条标 end，turn 结束；reasoning 不取 )；
 //	tool 是 assistant 的 tool 部件 ( shell、write、edit、question… ) 一行。
-//	它的对话框：一个 form ( session.form.list：各问题带选项、也许自己的话 ) 或
-//	一条权限请求 ( session.permission.list：once / always / reject )。一次一题，
-//	每题都有答案后整个 form 送出。Esc 取消 form、或拒绝请求。
+//
+//	它的对话框：
+//	一个 form ( session.form.list：各问题带选项、也许自己的话 )
+//	或
+//	一条权限请求 ( session.permission.list：once / always / reject )。
+//	一次一题，每题都有答案后整个 form 送出。Esc 取消 form、或拒绝请求。
 package opencode
 
 import (
@@ -51,6 +57,42 @@ type Reader struct {
 	partial map[string]map[string]any // form id -> {field: value}
 }
 
+// New 装配一个能直接用的 reader：shell 走 hc，meter 缓存自带，
+// GLM 限额用真实的 HTTP。
+func New(hc core.HC) *Reader {
+	return &Reader{
+		HC: hc, Shell: hc.HomeShell, Cache: core.NewMeter(), Fetch: httpFetch,
+		partial: map[string]map[string]any{},
+	}
+}
+
+// fetchClient 给限额探测用；走环境里的代理设置。
+var fetchClient = &http.Client{Timeout: 15 * time.Second}
+
+// httpFetch 是 Fetch 的默认实现。
+func httpFetch(ctx context.Context, url string, headers map[string]string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := fetchClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	//nolint:errcheck // 只读一次的探测响应。
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return resp.StatusCode, nil, err
+	}
+	return resp.StatusCode, body, nil
+}
+
 func short(s string, maxLen int) string {
 	one := strings.Join(strings.Fields(s), " ")
 	if len(one) > maxLen {
@@ -76,6 +118,7 @@ func (r *Reader) api(ctx context.Context, session, machine, cwd, operation strin
 			args += " -d " + shellQuote(string(raw))
 		}
 	}
+
 	out, err := r.Shell(ctx, session, machine,
 		fmt.Sprintf("cd %s && opencode api %s 2>/dev/null; echo \"%s$?\"", shellQuote(cwd), args, exitMark))
 	if err != nil {
@@ -89,6 +132,7 @@ func (r *Reader) api(ctx context.Context, session, machine, cwd, operation strin
 	if text == "" {
 		return map[string]any{}, true
 	}
+
 	var parsed any
 	if json.Unmarshal([]byte(text), &parsed) != nil {
 		return map[string]any{}, true
@@ -164,6 +208,7 @@ func messageItems(m map[string]any, ends bool) []core.Item {
 			context = &core.ContextUse{Used: used}
 		}
 	}
+
 	var out []core.Item
 	if content, ok := m["content"].([]any); ok {
 		for _, p := range content {
@@ -181,8 +226,9 @@ func messageItems(m map[string]any, ends bool) []core.Item {
 			}
 		}
 	}
-	// 绝不产出只喂 footer 的条目：OpenCode 原地改写一条消息 ( 先 reasoning 后
-	// text，同一个 id )，早读出的条目会把 id 标成已发、它的 text 就再读不到。
+
+	// 绝不产出只喂 footer 的条目：OpenCode 原地改写一条消息 ( 先 reasoning 后 text，同一个 id )，
+	// 早读出的条目会把 id 标成已发、它的 text 就再读不到。
 	if ends {
 		for i := len(out) - 1; i >= 0; i-- {
 			if out[i].Role == core.RoleAI {
@@ -286,8 +332,8 @@ func conversationAfter(lines []string, cur state.Cursor) []core.Item {
 	return items
 }
 
-// PickSession 挑该终端 OpenCode 的会话：其目录的会话中，活跃的优先，否则更新
-// 最近的。
+// PickSession 挑该终端 OpenCode 的会话：
+// 其目录的会话中，活跃的优先，否则更新最近的。
 func PickSession(list any, active any, cwd string) string {
 	sessions, _ := list.([]any)
 	var mine []map[string]any
@@ -533,8 +579,9 @@ type ZhipuLimit struct {
 	Hours float64
 }
 
-// ZhipuLimitsIn 从智谱的用量回复读 TOKENS_LIMIT：unit 3 是小时、6 是周
-// ( number 见过 1 与 7 )；TIME_LIMIT 是网页工具的月限，不挡模型，不取。
+// ZhipuLimitsIn 从智谱的用量回复读 TOKENS_LIMIT：
+// unit 3 是小时、6 是周 ( number 见过 1 与 7 )；
+// TIME_LIMIT 是网页工具的月限，不挡模型，不取。
 func ZhipuLimitsIn(reply []byte) []core.Limit {
 	var parsed struct {
 		Success bool `json:"success"`
@@ -587,9 +634,9 @@ func trimFloat(f float64) string {
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", f), "0"), ".")
 }
 
-// zhipuLimits 问智谱自己的用量插件问的那个接口。key 只在这一次请求里持有，
-// 绝不落盘、绝不入日志，也只发给它本来就在用的主机。任何一步不如预期都不给
-// 限额——footer 略去，绝不编 0%。
+// zhipuLimits 问智谱自己的用量插件问的那个接口。
+// key 只在这一次请求里持有，绝不落盘、绝不入日志，也只发给它本来就在用的主机。
+// 任何一步不如预期都不给限额——footer 略去，绝不编 0%。
 func (r *Reader) zhipuLimits(ctx context.Context, session, machine, cwd, provider string) []core.Limit {
 	host := ZhipuHost(provider)
 	if host == "" {
@@ -630,7 +677,8 @@ func (r *Reader) Meter(ctx context.Context, session, address string, meta map[st
 	machine := hccli.MachineOf(address)
 	term, err := r.HC.GetTerminal(ctx, session, address)
 	if err != nil {
-		return core.MeterInfo{}, nil //nolint:nilerr // 读不到终端就没有 footer 数据
+		//nolint:nilerr // 读不到终端就没有 footer 数据。
+		return core.MeterInfo{}, nil
 	}
 	fg, _ := term["foreground"].(map[string]any)
 	if fg == nil {

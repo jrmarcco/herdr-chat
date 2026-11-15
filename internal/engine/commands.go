@@ -13,12 +13,10 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
 
-// 斜杠命令目录 ( FINAL_PLAN §2.A，知识来自 cobanov 的 slashCommands )：枚举这台
+// 斜杠命令目录：枚举这台
 // 机器上该 agent 真实存在的命令——用户与项目的自定义命令、技能——让 "/" 在
 // 聊天里可发现，而不是背下来。本机直接读文件；远端机器的目录随 M7 的 setup
-// 通路补上。各版本内置命令表也按 claude --version 门控后随 M7 校准。
-
-// Command 是目录里的一条命令。
+// 通路补上。各版本内置命令表也按 claude --version 门控后随 M7 校准。 // Command 是目录里的一条命令。
 type Command struct {
 	Name     string
 	Desc     string

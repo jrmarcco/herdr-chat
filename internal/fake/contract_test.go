@@ -12,17 +12,15 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/readers"
 )
 
-// 契约检查，对应原版 engine.test.mjs 的 checkChat / checkReader 部分：
+// 契约检查 ( checkChat / checkReader )：
 // 跑不起来的 chat 或 reader 要在建任何房间之前的启动时刻就说出来。
 
-// 重复字面量收拢为常量 ( goconst )。
 const (
 	appFakeAgent = "fake-agent"
 	appClaude    = "claude-code"
 	procClaude   = "claude"
 )
 
-// badChat breaks one runtime rule: a live card that holds nothing.
 type badChat struct{ *fake.FakeChat }
 
 func (badChat) LiveBytes() int { return 0 }
@@ -50,11 +48,9 @@ func TestCheckReaderAndRegistry(t *testing.T) {
 	if err := reg.Register(fake.NewFakeReader()); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	// A second reader for the same app is refused.
 	if err := reg.Register(dupReader{fake.NewFakeReader()}); err == nil || err.Error() != "two readers for fake-agent" {
 		t.Errorf("duplicate app: err = %v", err)
 	}
-	// A reader without process names cannot be registered.
 	if err := reg.Register(emptyReader{fake.NewFakeReader()}); err == nil {
 		t.Errorf("a reader with no processes must fail CheckReader")
 	}
@@ -69,6 +65,7 @@ func TestCheckReaderAndRegistry(t *testing.T) {
 func TestAgentOf(t *testing.T) {
 	reg := readers.NewRegistry()
 	rd := fake.NewFakeReader()
+
 	rd.AppName = appClaude
 	rd.ProcNames = []string{procClaude}
 	if err := reg.Register(rd); err != nil {
@@ -97,6 +94,7 @@ func TestAgentOf(t *testing.T) {
 
 func TestFakeChatStartFiresReady(t *testing.T) {
 	chat := fake.NewFakeChat()
+
 	ready := make(chan struct{})
 	err := chat.Start(context.Background(), chats.Handlers{
 		OnReady: func() { close(ready) },
@@ -129,10 +127,12 @@ func TestFakeHCSnapshotAndSends(t *testing.T) {
 		"status":  map[string]any{"state": "working", "app": "fake-agent"},
 		"labels":  map[string]any{"where": "api / claude"},
 	}
+
 	view := hccli.NewView()
 	hc.FollowEvents(context.Background(), "default", hccli.EventHandlers{
 		OnTurn: func(hccli.TurnEvent) { t.Log("turn seen") },
 	}, view)
+
 	select {
 	case <-hc.SnapshotDone():
 	case <-time.After(time.Second):

@@ -13,18 +13,21 @@ import (
 	"time"
 )
 
-// 以你的身份行事 ( user_access_token )，为那几样只有你能改的聊天列表设置：群静音、
-// 你自己的标签 ( feed group )、置顶。你在直聊里 `/auth` 授权一次 ( OAuth 设备流：
-// 无需公网地址——bot 给出链接与 code，你在飞书里确认，bot 后台轮询 token )。
+// 以你的身份行事 ( user_access_token ) 为那几样只有你能改的聊天列表设置：
+// 群静音、你自己的标签 ( feed group )、置顶。
+//
+// 你在直聊里 `/auth` 授权一次
+// ( OAuth 设备流：无需公网地址——bot 给出链接与 code，你在飞书里确认，bot 后台轮询 token )。
+//
 // token 到期前自动刷新，存 state 目录的 user-token.json ( 0600 )，绝不入日志。
 // 这里发出的调用仅限本文件列出的那些。
-
 const (
 	groupNormal = "normal"
 	kClientID   = "client_id"
 
 	accountsHost = "https://accounts.feishu.cn"
 	openHost     = "https://open.feishu.cn"
+
 	// earlyRefresh 在到期前这么久就刷新。
 	earlyRefresh = 5 * time.Minute
 )
@@ -50,15 +53,16 @@ type Device struct {
 
 // UserAuth 是以你行事的全部状态 ( token 的存取与刷新 )。
 type UserAuth struct {
+	mu sync.Mutex
+
 	AppID     string
 	AppSecret string
+
 	// File 是 token 的落点 ( user-token.json )。
 	File string
 
 	// HTTP 可替换 ( 测试注入 )。
 	HTTP func(req *http.Request) (*http.Response, error)
-
-	mu sync.Mutex
 }
 
 // NewUserAuth 建一份。
@@ -171,9 +175,11 @@ func (u *UserAuth) WaitForToken(ctx context.Context, device *Device) (*tokenFile
 		if err != nil {
 			continue
 		}
+
 		var reply tokenReply
 		_ = json.NewDecoder(res.Body).Decode(&reply)
 		_ = res.Body.Close()
+		_ = res.Body.Close
 		if reply.AccessToken != "" {
 			return u.keep(reply), nil
 		}
@@ -223,9 +229,10 @@ func orInt(v, fallback int) int {
 	return fallback
 }
 
-// Token 给出可用的 access token：没过期的直接用，快过期的刷新；没有或刷新不了
-// 返回 ""。刷新被拒 ( token 撤销 ) 也返回 ""，网络不通则报错——片刻离线不该被
-// 当成撤销的 /auth。
+// Token 给出可用的 access token：
+// 没过期的直接用，快过期的刷新；没有或刷新不了返回 ""。
+// 刷新被拒 ( token 撤销 ) 也返回 ""，
+// 网络不通则报错——片刻离线不该被当成撤销的 /auth。
 func (u *UserAuth) Token(ctx context.Context) (string, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -264,8 +271,9 @@ func (u *UserAuth) Token(ctx context.Context) (string, error) {
 	return u.keep(reply).Access, nil
 }
 
-// Allowed 是"现在可以以你行事吗"：没有 token 或刷新被拒才是 false；一次没打通
-// 的调用报错，由调用方按"维持现状"处理。
+// Allowed 是"现在可以以你行事吗"：
+// 没有 token 或刷新被拒才是 false；
+// 一次没打通的调用报错，由调用方按"维持现状"处理。
 func (u *UserAuth) Allowed(ctx context.Context) (bool, error) {
 	token, err := u.Token(ctx)
 	if err != nil {

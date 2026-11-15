@@ -1,10 +1,10 @@
-// Package state 保存 bot 写下的东西，让重启能在停下的地方继续：每个 profile
-// 一个 state.json，形状与 Node 版逐字节兼容 ( spec §4.3 )，老用户放入新二进制
-// 即可无损接管。
+// Package state 保存 bot 写下的东西，让重启能在停下的地方继续：
+// 每个 profile 一个 state.json，形状与既有文件兼容，
+// 老用户放入新二进制即可无损接管。
 //
 // 读-合-写的纪律属于引擎的 lane ( 一个终端一条串行 lane，不会有并发写同一键 )；
-// 本包只负责整文件读写，原子落盘 ( tmp + rename )，且绝不静默丢弃损坏文件
-// ( optimization D4 )：损坏的文件被保留为 state.json.corrupt-<ts> 并如实上报，
+// 本包只负责整文件读写，原子落盘 ( tmp + rename )，且绝不静默丢弃损坏文件：
+// 损坏的文件被保留为 state.json.corrupt-<ts> 并如实上报，
 // 让丢失被听见。
 package state
 
@@ -18,18 +18,18 @@ import (
 	"time"
 )
 
-// ErrCorrupt 表示 state 文件无法读取；损坏的文件已被另行保留
-// ( 调用方应告知 owner：房间将被重建 )。
+// ErrCorrupt 表示 state 文件无法读取；
+// 损坏的文件已被另行保留 ( 调用方应告知 owner：房间将被重建 )。
 var ErrCorrupt = errors.New("state.json is damaged")
 
-// Store 读写整个 state ( spec §3.3 )。引擎在每次跨 lane 步骤后重新读取并
-// 合并，写者的串行由 lane 保证。
+// Store 读写整个 state。
+// 引擎在每次跨 lane 步骤后重新读取并合并，写者的串行由 lane 保证。
 type Store interface {
 	Read() (State, error)
 	Write(State) error
 }
 
-// State 是 bot 持久化的全部。字段名与 JSON 形状严格跟随 Node 版；
+// State 是 bot 持久化的全部。字段名与 JSON 形状保持兼容；
 // 原本是毫秒的数字仍是毫秒，ISO 字符串仍是字符串。
 type State struct {
 	Chats          map[string]Room         `json:"chats"`
@@ -42,14 +42,16 @@ type State struct {
 	Buttons        map[string]Button       `json:"buttons,omitempty"`
 	Spaces         map[string]SpaceIcon    `json:"spaces,omitempty"`
 	FeishuRead     map[string]int64        `json:"feishuRead,omitempty"`
-	TelegramOffset int64                   `json:"telegramOffset,omitempty"`
+	TelegramOffset int64                   `json:"telegramOffset,omitempty"` // 兼容保留 ( 本构建不实现 Telegram )
 	Down           *Down                   `json:"down,omitempty"`
 	Pairing        *Pairing                `json:"pairing,omitempty"`
-	Tags           map[string]string       `json:"tags,omitempty"` // scope -> 租户标签 id ( 含 "ended" )
+	UpdateNoticed  string                  `json:"updateNoticed,omitempty"` // 提示过的新版 ( 同版只提示一次 )
+	Tags           map[string]string       `json:"tags,omitempty"`          // scope -> 租户标签 id ( 含 "ended" )
 }
 
-// Room 是一个 tab 的镜像：对应哪个聊天房间、叫什么名字。后几个字段是该
-// 群的装饰 ( 飞书的租户标签与 /auth 后的静音/你的标签 )。
+// Room 是一个 tab 的镜像：
+// 对应哪个聊天房间、叫什么名字。
+// 后几个字段是该群的装饰 ( 飞书的租户标签与 /auth 后的静音/你的标签 )。
 type Room struct {
 	Chat    string `json:"chat"`
 	Name    string `json:"name"`
@@ -65,9 +67,9 @@ type Room struct {
 	Avatar     string `json:"avatar,omitempty"`     // 群头像的 image_key
 }
 
-// Cursor 记录一个终端的 reader 已发到哪：读到了哪里 ( at，一个恒落后最新
-// 条目 LAG 的 ISO 时间戳 )、lag 窗口内见过哪些条目 id，以及它会继续编辑的
-// 活卡片。
+// Cursor 记录一个终端的 reader 已发到哪：
+// 读到了哪里 ( at，一个恒落后最新条目 LAG 的 ISO 时间戳 )、
+// lag 窗口内见过哪些条目 id，以及它会继续编辑的活卡片。
 type Cursor struct {
 	At     string         `json:"at"`
 	Seen   [][2]string    `json:"seen"`
@@ -99,8 +101,8 @@ type React struct {
 	At       int64  `json:"at"`
 }
 
-// WaitingMsg 是对话框占着终端时你发来的消息；对话框一让开，就按顺序输入
-// 进去，绝不丢弃。
+// WaitingMsg 是对话框占着终端时你发来的消息；
+// 对话框一让开，就按顺序输入进去，绝不丢弃。
 type WaitingMsg struct {
 	Where   string `json:"where"`
 	Message string `json:"message"`
@@ -114,14 +116,14 @@ type OverviewRef struct {
 	Message string `json:"message"`
 }
 
-// Button 是 Telegram 按钮的值，以短 id 保存 ( callback_data 只有 64 字节 )；
+// Button 是按钮值的短 id 形态；
 // Labels 携带选项文本，用于识别过期卡片。
 type Button struct {
 	Value  json.RawMessage   `json:"value"`
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-// SpaceIcon 是 Telegram 给一个 space 的 topic 分配的图标颜色。
+// SpaceIcon 是按 space 记的图标颜色。
 type SpaceIcon struct {
 	Icon int64 `json:"icon"`
 }
@@ -143,16 +145,16 @@ type Pairing struct {
 // Empty 是全新的 state：还没有房间，其余字段皆缺省。
 func Empty() State { return State{Chats: map[string]Room{}} }
 
-// FileStore 把 state 放在一个 JSON 文件里，原子写入。不同终端的 lane 可能
-// 并发写，内部用锁串行化。
+// FileStore 把 state 放在一个 JSON 文件里，原子写入。
+// 不同终端的 lane 可能并发写，内部用锁串行化。
 type FileStore struct {
 	Path string
 	mu   sync.Mutex
 }
 
-// Read 读取 state；文件不存在视为空。无法解析的文件被挪到一边
-// ( corrupt-<ts> ) 并以 ErrCorrupt 连同备份路径上报——静默重置会丢掉全部
-// 房间映射。
+// Read 读取 state；文件不存在视为空。
+// 无法解析的文件被挪到一边 ( corrupt-<ts> ) 并以 ErrCorrupt 连同备份路径上报。
+// 静默重置会丢掉全部房间映射。
 func (s *FileStore) Read() (State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -185,7 +187,8 @@ func (s *FileStore) Write(st State) error {
 		st.Chats = map[string]Room{}
 	}
 	if st.Cursors != nil {
-		for k, c := range st.Cursors { // cursor 的 seen 列表须序列化为 [] 而非 null
+		// cursor 的 seen 列表须序列化为 [] 而非 null。
+		for k, c := range st.Cursors {
 			if c.Seen == nil {
 				c.Seen = [][2]string{}
 				st.Cursors[k] = c
@@ -206,8 +209,9 @@ func (s *FileStore) Write(st State) error {
 	return os.Rename(tmp, s.Path)
 }
 
-// MemStore 是内存中的 Store，供测试与 fake 使用。读与写都做深拷贝，
-// 模拟 FileStore 的语义：读到的副本随手改不会落盘，必须走 Write。
+// MemStore 是内存中的 Store，供测试与 fake 使用。
+// 读与写都做深拷贝，模拟 FileStore 的语义：
+// 读到的副本随手改不会落盘，必须走 Write。
 type MemStore struct {
 	mu sync.Mutex
 	St State

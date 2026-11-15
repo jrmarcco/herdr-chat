@@ -8,7 +8,7 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// 直聊总览 ( spec §6.9 )：终端一有变化就重排；短时间内的变化合并为一次更新。
+// 直聊总览：终端一有变化就重排；短时间内的变化合并为一次更新。
 
 // overviewWait 是总览更新的去抖窗口。
 func (e *Engine) overviewWait() time.Duration {
@@ -18,7 +18,7 @@ func (e *Engine) overviewWait() time.Duration {
 	return 2 * time.Second
 }
 
-// scheduleOverview：请求一次总览刷新；已有的排队请求不重复。
+// scheduleOverview 请求一次总览刷新；已有的排队请求不重复。
 func (e *Engine) scheduleOverview() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -33,14 +33,13 @@ func (e *Engine) scheduleOverview() {
 	})
 }
 
-// refreshOverview：把当前每个终端一行排出来，交给 chat 原地编辑
-// ( fresh=true 时发一条新的，/ls 用 )。
+// refreshOverview 把当前每个终端一行排出来，交给 chat 原地编辑 ( fresh=true 时发一条新的，/ls 用 )。
 func (e *Engine) refreshOverview(fresh bool) {
 	if e.ctx == nil || e.ctx.Err() != nil {
 		return
 	}
-	rows := e.overviewRows()
-	if err := e.Chat.ShowOverview(e.ctx, rows, core.OverviewOpts{Fresh: fresh}); err != nil {
+	rows := e.overviewRows
+	if err := e.Chat.ShowOverview(e.ctx, rows(), core.OverviewOpts{Fresh: fresh}); err != nil {
 		xlog.For("engine").Warn("总览更新失败", "error", err)
 	}
 }

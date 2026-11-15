@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// 终端所在机器 home 目录下的文件：本机直接读，远端经 `hc exec --on`
-// ( 移植自原版 lib/core/home.mjs )。
+// 终端所在机器 home 目录下的文件：本机直接读，远端经 `hc exec --on`。
 
 var homeDirFn = defaultHome
 
@@ -27,7 +26,8 @@ func SetHomeDir(dir string) { homeDirFn = func() string { return dir } }
 // HomeFile 读终端所在机器 home 下的一个文件 ( tail>0 时只取尾部那些行 )。
 func (c *CLI) HomeFile(ctx context.Context, session, machine, rel string, tail int) (string, error) {
 	if machine == "" {
-		text, err := os.ReadFile(homeDirFn() + "/" + rel) //nolint:gosec // G304: 路径由 reader 按固定布局拼出
+		//nolint:gosec // G304: 路径由 reader 按固定布局拼出。
+		text, err := os.ReadFile(homeDirFn() + "/" + rel)
 		if err != nil {
 			return "", err
 		}

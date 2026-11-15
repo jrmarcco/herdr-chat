@@ -14,12 +14,11 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// 房间生命周期 ( spec §6.2，移植自原版 engine.mjs 的 rooms 一节 )：
-// 一个房间照 herdr-app 展示终端的方式命名，归属 tab ( 按 herdr.tab 标签 id )
-// 而非恰好跑在里面的终端——终端被替换后，新的接管 tab 的房间。
-
-// keyOf：终端在 state 里的键，"<session>|tN"；别的机器上的终端是
-// "@<machine>|<machine>/tN"，机器名取跟随它的那个视角的叫法。
+// 房间生命周期：
+// 一个房间照 herdr-app 展示终端的方式命名，
+// 归属 tab ( 按 herdr.tab 标签 id ) 而非恰好跑在里面的终端——终端被替换后，新的接管 tab 的房间。
+// keyOf：终端在 state 里的键，"<session>|tN"；别的机器上的终端是 "@<machine>|<machine>/tN"，
+// 机器名取跟随它的那个视角的叫法。
 func (e *Engine) keyOf(session, address string) string {
 	scope := session
 	if machine := hccli.MachineOf(address); machine != "" {
@@ -39,7 +38,7 @@ func AddressOfKey(k string) string {
 	return k[strings.Index(k, "|")+1:]
 }
 
-// shownWhere：live 终端才谈得上房间；where 是 herdr-app 的 "<space> / <tab>"。
+// shownWhere live 终端才谈得上房间；where 是 herdr-app 的 "<space> / <tab>"。
 func shownWhere(record hccli.Terminal) (space, tab string) {
 	if record == nil || !record.Live() {
 		return "", ""
@@ -57,10 +56,10 @@ var (
 	leadingGlyphs = regexp.MustCompile(`^[^\p{L}\p{N}]+`)
 )
 
-// tabName：herdr-app 只给了编号 ( "2" ) 的 tab 什么也没说，用终端标题顶上
-// ( Claude Code 会把会话名写进去 )，再退到 hc 名；标题开头的状态符号剥掉，
-// spinner 永远不该给房间改名。带更多内容的标题 ( Codex 的 "<thread> | <folder>" )
-// 由 reader 的 TitleOf 挑出名字那段。
+// tabName herdr-app 只给了编号 ( "2" ) 的 tab 什么也没说，
+// 用终端标题顶上 ( Claude Code 会把会话名写进去 )，再退到 hc 名；标题开头的状态符号剥掉，
+// spinner 永远不该给房间改名。
+// 带更多内容的标题 ( Codex 的 "<thread> | <folder>" )由 reader 的 TitleOf 挑出名字那段。
 func (e *Engine) tabName(tab string, record hccli.Terminal) string {
 	if !digitsOnly.MatchString(tab) {
 		return tab
@@ -111,9 +110,10 @@ func (e *Engine) terminalOfRoom(room core.Room) (session, address string, ok boo
 	return "", "", false
 }
 
-// adoptTabRoom：房间归属 tab。同 scope 里另一个键已带着同一个 tab id：
-// 旧终端还活着 → 等它 ( WAIT，返回 ok=false 且 adopted=false )；否则把旧房间
-// ( 连同置顶与回执映射 ) 改挂到新键，旧终端的遗言由它的 postEnd 先发。
+// adoptTabRoom 房间归属 tab。
+// 同 scope 里另一个键已带着同一个 tab id：
+// 旧终端还活着 → 等它 ( WAIT，返回 ok=false 且 adopted=false )；
+// 否则把旧房间 ( 连同置顶与回执映射 ) 改挂到新键，旧终端的遗言由它的 postEnd 先发。
 // 返回 (房间, 是否接管成功)；( 空, false ) 表示需要新建。
 func (e *Engine) adoptTabRoom(k, tab string) (state.Room, bool, bool) {
 	st := e.read()
@@ -129,19 +129,23 @@ func (e *Engine) adoptTabRoom(k, tab string) (state.Room, bool, bool) {
 	if !found {
 		return state.Room{}, false, false
 	}
+
 	// 旧终端仍 live：它的 end 会把房间交过来，现在不建。
 	if v := e.viewOf(old.Session); v != nil {
 		if t, ok := v.Get(AddressOfKey(oldKey)); ok && t.Live() {
 			return state.Room{}, false, true // WAIT
 		}
 	}
+
 	st = e.read()
 	room, still := st.Chats[oldKey]
 	if !still {
 		return state.Room{}, false, false
 	}
+
 	delete(st.Chats, oldKey)
 	st.Chats[k] = room
+
 	if st.Pinned != nil {
 		if p, ok := st.Pinned[oldKey]; ok {
 			if st.Pinned == nil {
@@ -163,6 +167,7 @@ func (e *Engine) adoptTabRoom(k, tab string) (state.Room, bool, bool) {
 	if st.Cursors != nil {
 		delete(st.Cursors, oldKey)
 	}
+
 	e.write(st)
 	xlog.For("engine").Info("房间跟随它 tab 的新终端", "room", room.Name, "chat", room.Chat, "address", AddressOfKey(k))
 	_, err := e.Chat.Post(e.ctx, core.Room(room.Chat),
@@ -179,9 +184,11 @@ func (e *Engine) viewOf(session string) *hccli.View {
 	return e.views[session]
 }
 
-// ensureRoom 确保一个终端的房间存在且跟得上。已存在的房间无条件放行——
-// 终端已结束时的遗言与结束语也要发进去；live + where + 跟随权 的门只拦
-// "新建"。新房间做历史回填。返回房间 id；WAIT ( 旧终端还活着 ) 返回空。
+// ensureRoom 确保一个终端的房间存在且跟得上。
+// 已存在的房间无条件放行 —— 终端已结束时的遗言与结束语也要发进去；
+// live + where + 跟随权 的门只拦 "新建"。
+// 新房间做历史回填。返回房间 id；
+// WAIT ( 旧终端还活着 ) 返回空。
 func (e *Engine) ensureRoom(session string, record hccli.Terminal) (core.Room, error) {
 	k := e.keyOf(session, record.Address())
 	if known, ok := e.read().Chats[k]; ok {
@@ -210,6 +217,7 @@ func (e *Engine) ensureRoom(session string, record hccli.Terminal) (core.Room, e
 	if err != nil {
 		return "", err
 	}
+
 	st := e.read()
 	st.Chats[k] = state.Room{Chat: string(room), Name: name, Session: session, Tab: tab}
 	e.write(st)
@@ -221,8 +229,9 @@ func (e *Engine) ensureRoom(session string, record hccli.Terminal) (core.Room, e
 	return room, nil
 }
 
-// refreshRoom 让一个已有房间跟得上：复活、改名、装饰。终端已结束时 where
-// 读不出来，改名与装饰跳过，房间照给 ( 遗言、结束语都发得进去 )。
+// refreshRoom 让一个已有房间跟得上：
+// 复活、改名、装饰。终端已结束时 where 读不出来，
+// 改名与装饰跳过，房间照给 ( 遗言、结束语都发得进去 )。
 func (e *Engine) refreshRoom(session string, record hccli.Terminal, k string, known state.Room) (core.Room, error) {
 	if known.Ended {
 		e.reviveRoom(k, known)
@@ -252,8 +261,8 @@ func (e *Engine) refreshRoom(session string, record hccli.Terminal, k string, kn
 	return core.Room(known.Chat), nil
 }
 
-// endRoom：终端没了，房间带着历史留下，标 ended——同一位置的新终端得到的
-// 就不会是老房间。
+// endRoom 终端没了，房间带着历史留下，
+// 标 ended——同一位置的新终端得到的就不会是老房间。
 func (e *Engine) endRoom(k string) {
 	known, ok := e.read().Chats[k]
 	if !ok || known.Ended {
@@ -279,9 +288,9 @@ func (e *Engine) reviveRoom(k string, known state.Room) {
 	xlog.For("engine").Info("房间复活", "name", known.Name, "chat", known.Chat)
 }
 
-// endGone：bot 停机期间结束的终端收不到 end 事件；每个 session 的首快照都到齐
-// 后，任何 session 里都不 live 的房间判 ended。别的机器上的终端只在那台机器
-// 连接着时才算真的没了——断连绝不会结束一个房间。
+// endGone bot 停机期间结束的终端收不到 end 事件；
+// 每个 session 的首快照都到齐后，任何 session 里都不 live 的房间判 ended。
+// 别的机器上的终端只在那台机器连接着时才算真的没了——断连绝不会结束一个房间。
 func (e *Engine) endGone() {
 	connected := map[string]bool{}
 	for _, session := range e.Sessions {
@@ -295,9 +304,11 @@ func (e *Engine) endGone() {
 			}
 		}
 	}
+
 	e.mu.Lock()
 	topology := e.topology
 	e.mu.Unlock()
+
 	alive := map[string]bool{}
 	for _, session := range e.Sessions {
 		if v := e.viewOf(session); v != nil {
@@ -314,6 +325,7 @@ func (e *Engine) endGone() {
 			}
 		}
 	}
+
 	for k, c := range e.read().Chats {
 		address := AddressOfKey(k)
 		machine := hccli.MachineOf(address)
@@ -364,7 +376,7 @@ func transcriptOf(items []core.Item) string {
 
 func clockOf(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
-// backfill：新房间不空白 ( spec §6.7 )——这个终端之前的整段对话一份文件，
+// backfill 新房间不空白——这个终端之前的整段对话一份文件，
 // 最新一段一帖折叠；只取房间游标之前的内容 ( 其余照常发，不会来两遍 )；
 // 静默、只此一次。
 func (e *Engine) backfill(session string, record hccli.Terminal, k string, room core.Room, name string, parts map[string]bool) {
@@ -372,12 +384,14 @@ func (e *Engine) backfill(session string, record hccli.Terminal, k string, room 
 	if reader == nil || (!parts["file"] && !parts["folded"]) {
 		return
 	}
+
 	until := e.cursorOf(k).At
 	untilTime, _ := time.Parse(time.RFC3339, until)
 	all, err := reader.After(e.ctx, session, record.Address(), core.StartCursor("0000-00-00T00:00:00.000Z"))
 	if err != nil || all == nil {
 		return
 	}
+
 	var items []core.Item
 	for _, it := range all.Items {
 		if it.Role != core.RoleMeta && !it.At.After(untilTime) {
@@ -387,6 +401,7 @@ func (e *Engine) backfill(session string, record hccli.Terminal, k string, room 
 	if len(items) == 0 {
 		return
 	}
+
 	whole := transcriptOf(items)
 	if len(whole) > FileBytes {
 		whole = fmt.Sprintf("_(the oldest part is left out: the whole is over %d MB)_\n\n…%s", FileBytes/(1<<20), whole[len(whole)-FileBytes:])
@@ -405,6 +420,7 @@ func (e *Engine) backfill(session string, record hccli.Terminal, k string, room 
 			xlog.For("engine").Warn("回填文件发送失败", "error", err)
 		}
 	}
+
 	// 最新、装得下的那些整条，最旧的在前。
 	var recent []core.Item
 	bytes := 0

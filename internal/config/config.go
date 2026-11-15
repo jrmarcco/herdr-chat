@@ -1,18 +1,21 @@
-// Package config 映射 herdrchat 的设置：一个 profile 放在哪里 ( PlacesOf )、
-// config.env 的格式 ( ParseEnv、SetConfigValue )，以及一次运行需要的值 ( Load )。
+// Package config 映射 herdrchat 的设置：
+// 一个 profile 放在哪里 ( PlacesOf )、
+// config.env 的格式 ( ParseEnv、SetConfigValue )，
+// 以及一次运行需要的值 ( Load )。
 //
 // 从环境算出一个 profile 的目录 ( 移植自原版 placesOf ):
 //
 //	~/.config/herdrchat/<profile>/config.env   设置 ( XDG_CONFIG_HOME 可移动 )
 //	~/.local/state/herdrchat/<profile>/        bot 写下的东西 ( XDG_STATE_HOME 可移动 )
 //
-// HERDRCHAT_HOME 则把一个 profile 放进你指定的一个目录：config.env 与 state/
-// 都在其中。当目录不是惯常位置时，profile id 会带上一个短标签——在别的目录里
-// 试验的安装，永远不会停掉、替换或删除正式实例的服务与 hc 终端。
+// HERDRCHAT_HOME 则把一个 profile 放进你指定的一个目录：
+// config.env 与 state/ 都在其中。
+// 当目录不是惯常位置时，profile id 会带上一个短标签 —— 在别的目录里试验的安装，
+// 永远不会停掉、替换或删除正式实例的服务与 hc 终端。
 package config
 
 import (
-	"crypto/sha1" //nolint:gosec // G505: 与 Node 版 placesOf 一致的目录标签哈希，非密码学用途
+	"crypto/sha1" //nolint:gosec // G505: 目录标签哈希，非密码学用途。
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -33,8 +36,8 @@ type Places struct {
 
 var profileRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-// PlacesOf 从 env ( 可为 nil 表示全未设置 ) 与 home 目录算出一个 profile 的
-// 目录。纯函数：测试不会碰你的 home。
+// PlacesOf 从 env ( 可为 nil 表示全未设置 ) 与 home 目录算出一个 profile 的目录。
+// 纯函数：测试不会碰你的 home。
 func PlacesOf(env map[string]string, home string) (Places, error) {
 	if env == nil {
 		env = map[string]string{}
@@ -46,6 +49,7 @@ func PlacesOf(env map[string]string, home string) (Places, error) {
 	if !profileRe.MatchString(profile) {
 		return Places{}, fmt.Errorf("profile %q: use letters, digits, - and _ only", profile)
 	}
+
 	// 空值视为未设置，与 shell 的语义一致。
 	get := func(key string) string { return env[key] }
 	var configDir, stateDir string
@@ -64,13 +68,15 @@ func PlacesOf(env map[string]string, home string) (Places, error) {
 		configDir = filepath.Join(configRoot, "herdrchat", profile)
 		stateDir = filepath.Join(stateRoot, "herdrchat", profile)
 	}
+
 	// 挪动过的安装绝不与惯常位置共享终端或服务名。
 	usual := filepath.Join(home, ".config", "herdrchat", profile)
 	usualState := filepath.Join(home, ".local", "state", "herdrchat", profile)
 	moved := filepath.Clean(configDir) != filepath.Clean(usual) || filepath.Clean(stateDir) != filepath.Clean(usualState)
 	id := profile
 	if moved {
-		sum := sha1.Sum([]byte(filepath.Clean(configDir) + "\x00" + filepath.Clean(stateDir))) //nolint:gosec // G401: 目录标签哈希沿用 Node 版算法，非安全用途
+		//nolint:gosec // G401: 目录标签哈希，非安全用途。
+		sum := sha1.Sum([]byte(filepath.Clean(configDir) + "\x00" + filepath.Clean(stateDir)))
 		id = profile + "-" + hex.EncodeToString(sum[:])[:6]
 	}
 	terminal := "herdrchat-" + id
@@ -80,8 +86,8 @@ func PlacesOf(env map[string]string, home string) (Places, error) {
 	return Places{Profile: profile, ID: id, ConfigDir: configDir, StateDir: stateDir, Terminal: terminal}, nil
 }
 
-// MakeDirs 创建 config 与 state 目录，私有 ( mode 700 )。在 bot 启动时调用，
-// 而非包加载时 ( 测试不得碰你的 home )。
+// MakeDirs 创建 config 与 state 目录，私有 ( mode 700 )。
+// 在 bot 启动时调用，而非包加载时 ( 测试不得碰你的 home )。
 func MakeDirs(p Places) error {
 	for _, dir := range []string{p.ConfigDir, p.StateDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -93,8 +99,8 @@ func MakeDirs(p Places) error {
 
 var envLineRe = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$`)
 
-// stripQuotes 剥掉一层两侧成对的引号 ( RE2 不支持反向引用，shell 风格的
-// `^(['"])(.*)\1$` 只好手工实现 )。
+// stripQuotes 剥掉一层两侧成对的引号
+// ( RE2 不支持反向引用，shell 风格的 `^(['"])(.*)\1$` 只好手工实现 )。
 func stripQuotes(s string) string {
 	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
 		return s[1 : len(s)-1]
@@ -122,11 +128,12 @@ func ParseEnv(file string) (map[string]string, error) {
 	return env, nil
 }
 
-// SetConfigValue 在 config.env 中设置一个键，其余每一行 ( 连同注释 ) 原样
-// 保留：替换该键所在行，或在末尾追加。文件保持私有。
+// SetConfigValue 在 config.env 中设置一个键，
+// 其余每一行 ( 连同注释 ) 原样保留：替换该键所在行，或在末尾追加。文件保持私有。
 func SetConfigValue(file, key, value string) error {
 	var lines []string
-	if text, err := os.ReadFile(file); err == nil { //nolint:gosec // G304: 路径来自用户自己的 config.env 布局，非不可信输入
+	//nolint:gosec // G304: 路径来自用户自己的 config.env 布局，非不可信输入。
+	if text, err := os.ReadFile(file); err == nil {
 		lines = strings.Split(string(text), "\n")
 	} else if !os.IsNotExist(err) {
 		return err
@@ -147,7 +154,9 @@ func SetConfigValue(file, key, value string) error {
 		}
 		lines = append(lines, key+"="+value, "")
 	}
-	if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o600); err != nil { //nolint:gosec // G703: 写入目标即用户自己的 config.env，非不可信输入
+
+	//nolint:gosec // G703: 写入目标即用户自己的 config.env，非不可信输入。
+	if err := os.WriteFile(file, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
 		return err
 	}
 	return os.Chmod(file, 0o600)
@@ -258,8 +267,8 @@ type Config struct {
 	History     map[string]bool
 }
 
-// Load 把 config.env 与环境变量合并 ( 环境变量优先，同 shell )，并检查
-// 一个 chat app 启动不可或缺的键 ( requires )。
+// Load 把 config.env 与环境变量合并 ( 环境变量优先，同 shell )，
+// 并检查一个 chat app 启动不可或缺的键 ( requires )。
 func Load(file string, env map[string]string, requires []string) (Config, error) {
 	fromFile, err := ParseEnv(file)
 	if err != nil {

@@ -8,9 +8,8 @@ import (
 	"testing"
 )
 
-// 转录自原版 test/menu.test.mjs：权限对话框、多选与勾选、防陈旧 key、
-// 预览框 ( beside )、resize 折行稳定。
-
+// 菜单解析行为测试：
+// 权限对话框、多选与勾选、防陈旧 key、预览框 ( beside )、resize 折行稳定。
 func rule(width int) string { return strings.Repeat("─", width) }
 
 func permissionDialog(cmd string) string {
@@ -257,8 +256,9 @@ func TestMenuKeyStableAcrossResizeRewrap(t *testing.T) {
 	}
 }
 
-// 语料库 ( FINAL_PLAN §2.C )：testdata/screens 下的真实抓屏，逐个解析——
-// 有编号菜单的给出选项与稳定 key，没有的安静返回 nil；绝不 panic。
+// 语料库：
+// testdata/screens 下的真实抓屏，逐个解析 —— 有编号菜单的给出选项与稳定 key，
+// 没有的安静返回 nil；绝不 panic。
 func TestScreenCorpus(t *testing.T) {
 	entries, err := filepath.Glob("../../testdata/screens/*.txt")
 	if err != nil || len(entries) < 20 {
@@ -266,7 +266,8 @@ func TestScreenCorpus(t *testing.T) {
 	}
 	menus := 0
 	for _, file := range entries {
-		text, err := os.ReadFile(file) //nolint:gosec // G304: 测试语料目录内的固定文件
+		//nolint:gosec // G304: 测试语料目录内的固定文件。
+		text, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}

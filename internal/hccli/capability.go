@@ -6,17 +6,17 @@ import (
 	"time"
 )
 
-// Capabilities 是一台机器上的 hc 能做什么 ( FINAL_PLAN §2.D )。探测失败只表示
-// "按最低能力对待"，绝不因此拒绝启动：需要更高能力的功能保持关闭，
-// status 会如实说明。
+// Capabilities 是一台机器上的 hc 能做什么。
+// 探测失败只表示 "按最低能力对待"，绝不因此拒绝启动：
+// 需要更高能力的功能保持关闭，status 会如实说明。
 type Capabilities struct {
 	HCVersion         string
-	HasTerminalAttach bool // `hc terminal attach` (hc 0.9+)
+	HasTerminalAttach bool
 }
 
-// ProbeCapabilities 直接问 hc 自己。版本来自 `hc --version`；terminal attach
-// 则看 `hc terminal attach --help` 是否认识这个动词。尽力而为、短超时：
-// 没有 hc 的机器自然什么都答不上来。
+// ProbeCapabilities 直接问 hc 自己。
+// 版本来自 `hc --version`；terminal attach 则看 `hc terminal attach --help` 是否认识这个动词。
+// 尽力而为、短超时：没有 hc 的机器自然什么都答不上来。
 func (c *CLI) ProbeCapabilities(parent context.Context) Capabilities {
 	caps := Capabilities{}
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
@@ -28,11 +28,11 @@ func (c *CLI) ProbeCapabilities(parent context.Context) Capabilities {
 			if line == "" {
 				continue
 			}
-			// "hc 0.9.2" or a bare "0.9.2".
 			caps.HCVersion = strings.TrimSpace(strings.TrimPrefix(line, "hc"))
 			break
 		}
 	}
+
 	if out, err := c.Run(ctx, "default", []string{"terminal", "attach", "--help"}, 5*time.Second); err == nil {
 		// 能跑通：动词存在且能解析选项。
 		_ = out

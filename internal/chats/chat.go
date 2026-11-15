@@ -1,6 +1,6 @@
-// Package chats 是两条插件缝中 chat app 一侧：每个 chat app ( 飞书、
-// Telegram，日后的 Slack/Discord ) 为 core 实现的契约——core 绝不 import
-// 任何 app，app 也绝不 import 引擎。
+// Package chats 是两条插件缝中 chat app 一侧：
+// 每个 chat app ( 本构建只有飞书 ) 为 core 实现的契约 —— core 绝不 import 任何app，
+// app 也绝不 import 引擎。
 package chats
 
 import (
@@ -11,21 +11,22 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/core"
 )
 
-// Handlers 是 chat app 递向引擎一侧的东西 ( spec §3.1 )：来自你聊天的消息与
-// 按钮点击，以及 owner 已知的通报。
+// Handlers 是 chat app 递向引擎一侧的东西：
+// 来自你聊天的消息与按钮点击，以及 owner 已知的通报。
 type Handlers struct {
 	OnMessage func(core.Incoming)
 	OnAction  func(core.Click) (core.ActionResult, error)
 	OnReady   func()
 }
 
-// chat 契约的 Go 形态。Node 原版靠 checkChat 证明一个模块带全了约 30 个成员；
-// 在 Go 里，app 赋值给 Chat 的那一刻这就是编译器的活——运行期仍可能出错的
-// ( 空名字、零字节上限 ) 由 CheckChat 在启动时、建任何房间之前指出。
+// chat 契约的 Go 形态：
+// app 赋值给 Chat 的那一刻，成员齐全就是编译器的活；
+// 运行期仍可能出错的 ( 空名字、零字节上限 ) 由 CheckChat 在启动时、建任何房间之前指出。
 type Chat interface {
 	// 元信息
-	Name() string     // "feishu" | "telegram"
+	Name() string     // "feishu"
 	Ready() bool      // owner known; unknown, no room is made
+	OwnerKey() string // the config.env key that names the owner
 	Help() []string   // its own direct-chat command lines
 	RoomWord() string // "group" | "topic"
 	LiveBytes() int   // what one editable card holds
@@ -40,6 +41,7 @@ type Chat interface {
 	OpenRoom(ctx context.Context, look core.RoomLook) (core.Room, error)
 	RenameRoom(ctx context.Context, room core.Room, name string) error
 	PlaceRoom(ctx context.Context, k string, place core.Place) error
+	DeleteRoom(k string) error // 彻底删掉一个房间 ( /clean：解散群 )
 	EndRoom(ctx context.Context, k string) error
 	ReviveRoom(ctx context.Context, k string) error
 
@@ -70,8 +72,7 @@ type Chat interface {
 	ShowOverview(ctx context.Context, rows []core.OverviewRow, opts core.OverviewOpts) error
 }
 
-// CheckChat 在启动时说出编译期无法得知的问题。它取代了 Node checkChat 的
-// 成员缺失排查，留下的是运行期合理性检查。
+// CheckChat 在启动时说出编译期无法得知的问题：运行期合理性检查。
 func CheckChat(c Chat) error {
 	if c == nil {
 		return fmt.Errorf("no chat app")
@@ -79,6 +80,9 @@ func CheckChat(c Chat) error {
 	var problems []string
 	if c.Name() == "" {
 		problems = append(problems, "no name")
+	}
+	if c.OwnerKey() == "" {
+		problems = append(problems, "no config key for its owner")
 	}
 	if c.RoomWord() == "" {
 		problems = append(problems, "no word for a room")

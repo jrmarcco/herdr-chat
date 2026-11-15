@@ -1,6 +1,6 @@
-// Package fake 是引擎行为测试运行的测试三件套 ( spec §13，对应原版
-// test/fakes.mjs )：记录每次调用的 chat、按剧本应答的 hc、按吩咐说话的
-// reader。没有 socket、没有网络、除临时目录外没有磁盘。
+// Package fake 是引擎行为测试运行的测试三件套：
+// 记录每次调用的 chat、按剧本应答的 hc、按吩咐说话的reader。
+// 没有 socket、没有网络、除临时目录外没有磁盘。
 package fake
 
 import (
@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/jrmarcco/herdr-chat/internal/chats"
@@ -25,8 +27,7 @@ type Call struct {
 	Args []any
 }
 
-// FakeChat 记录每次调用并按剧本应答。M1 阶段返回零值即可；引擎的测试会
-// 逐步长出各自要断言的东西。
+// FakeChat 记录每次调用并按剧本应答。
 type FakeChat struct {
 	mu      sync.Mutex
 	calls   []Call
@@ -36,16 +37,16 @@ type FakeChat struct {
 	// LiveBytesVal / FoldedBytesVal 覆盖默认字节上限 ( 活卡片切卡等测试用 )。
 	LiveBytesVal   int
 	FoldedBytesVal int
+
 	// FailPost 让前 N 次 Post / PostCard 失败 ( deliver 重试的测试用 )。
 	FailPost int
 
-	lastMsg core.Message
-
+	lastMsg  core.Message
 	Handlers chats.Handlers
 }
 
-// NewFakeChat 建一个 owner 已知 ( Ready 为 true ) 的实例——这才是有意义的
-// 状态；测试需要时再翻转它。
+// NewFakeChat 建一个 owner 已知 ( Ready 为 true ) 的实例——这才是有意义的状态；
+// 测试需要时再翻转它。
 func NewFakeChat() *FakeChat { return &FakeChat{ready: true} }
 
 func (f *FakeChat) record(name string, args ...any) {
@@ -93,7 +94,8 @@ func (f *FakeChat) LastPosted() core.Message {
 func (f *FakeChat) Name() string     { return "fake" }
 func (f *FakeChat) RoomWord() string { return "room" }
 func (f *FakeChat) Ready() bool      { return f.ready }
-func (f *FakeChat) SetReady(r bool)  { f.ready = r } // 测试翻转 owner 已知状态
+func (f *FakeChat) OwnerKey() string { return "FAKE_OWNER_ID" }
+func (f *FakeChat) SetReady(r bool)  { f.ready = r } // 测试翻转 owner 已知状态。
 func (f *FakeChat) Help() []string   { return nil }
 func (f *FakeChat) LiveBytes() int {
 	if f.LiveBytesVal > 0 {
@@ -110,7 +112,6 @@ func (f *FakeChat) FoldedBytes() int {
 }
 
 func (f *FakeChat) Split(markdown string) []string {
-	// One piece: the fake has no platform limit to respect.
 	return []string{markdown}
 }
 
@@ -149,6 +150,12 @@ func (f *FakeChat) PlaceRoom(ctx context.Context, k string, place core.Place) er
 }
 
 func (f *FakeChat) EndRoom(ctx context.Context, k string) error { f.record("EndRoom", k); return nil }
+
+// DeleteRoom 记录 /clean 的解散。
+func (f *FakeChat) DeleteRoom(k string) error {
+	f.record("DeleteRoom", k)
+	return nil
+}
 
 func (f *FakeChat) ReviveRoom(ctx context.Context, k string) error {
 	f.record("ReviveRoom", k)
@@ -267,23 +274,32 @@ var _ chats.Chat = (*FakeChat)(nil)
 // FakeHC 按剧本应答并记录发来的东西。它保存事件 handlers，测试就能像
 // session 的事件流那样驱动事件。
 type FakeHC struct {
-	mu        sync.Mutex
-	Terminals map[string]hccli.Terminal // by address, current records
-	Screens   map[string]string         // by address
-	// HomeDirSet 让 HomeShell 的本机分支在测试目录里跑；Execs/ExecFn 是
-	// `hc exec --on` 的记录与剧本。
-	HomeDirSet string
-	Execs      []ExecCall
-	ExecFn     func(session, machine, script string) (string, error)
-	Sent       []SentText
-	Keyed      []SentKeys
-	Labeled    []SetLabel
+	mu sync.Mutex
+
+	Terminals  map[string]hccli.Terminal // by address, current records
+	Screens    map[string]string         // by address
+	HomeDirSet string                    // 让 HomeShell 的本机分支在测试目录里跑
+
+	// Execs / ExecFn 是 `hc exec --on` 的记录与剧本。
+	Execs   []ExecCall
+	ExecFn  func(session, machine, script string) (string, error)
+	Sent    []SentText
+	Keyed   []SentKeys
+	Labeled []SetLabel
+	Runs    []RunCall
+	RunOut  string
 
 	sessions map[string]hccli.EventHandlers
 	views    map[string]*hccli.View
 }
 
 // SentText 是 fake 接下的一次 `hc send`。
+// RunCall 是一次 hc run 的记录。
+type RunCall struct {
+	Session string
+	Opts    hccli.RunOpts
+}
+
 type SentText struct {
 	Session, Address, Text string
 	Force                  bool
@@ -316,7 +332,7 @@ func (f *FakeHC) FollowEvents(ctx context.Context, session string, h hccli.Event
 	defer f.mu.Unlock()
 	f.sessions[session] = h
 	f.views[session] = view
-	// A first snapshot of everything already there, as the real stream does.
+
 	var list []hccli.Terminal
 	for _, t := range f.Terminals {
 		list = append(list, t)
@@ -346,8 +362,8 @@ func (f *FakeHC) SnapshotDone() <-chan struct{} {
 	return done
 }
 
-// cloneTerm 深拷贝一条终端记录：fake 改的永远是自己的副本，与引擎正在读的
-// 记录 ( 含嵌套的 status、labels ) 不共享任何 map。
+// cloneTerm 深拷贝一条终端记录：fake 改的永远是自己的副本，
+// 与引擎正在读的记录 ( 含嵌套的 status、labels ) 不共享任何 map。
 func cloneTerm(t hccli.Terminal) hccli.Terminal {
 	raw, err := json.Marshal(t)
 	if err != nil {
@@ -380,8 +396,7 @@ func (f *FakeHC) Turn(session, address, stateWord string) {
 	}
 }
 
-// Change 触发其余任意事件——先像真实事件流的 apply 那样应用到 fake 的终端
-// 记录上，让引擎看到的记录是最新的。
+// Change 触发其余任意事件——先像真实事件流的 apply 那样应用到 fake 的终端记录上，让引擎看到的记录是最新的。
 func (f *FakeHC) Change(session, typ, address string, data map[string]any) {
 	f.mu.Lock()
 	record := cloneTerm(f.Terminals[address])
@@ -493,7 +508,13 @@ func (f *FakeHC) PutFile(ctx context.Context, session, address, localFile string
 }
 
 func (f *FakeHC) RunTerminal(ctx context.Context, session string, o hccli.RunOpts) (json.RawMessage, error) {
-	return json.RawMessage("{}"), nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Runs = append(f.Runs, RunCall{Session: session, Opts: o})
+	if f.RunOut != "" {
+		return json.RawMessage(f.RunOut), nil
+	}
+	return json.RawMessage(`{"address":"t99"}`), nil
 }
 
 func (f *FakeHC) Kill(ctx context.Context, session, address string) error { return nil }
@@ -515,8 +536,8 @@ type FakeReader struct {
 	Reading   *core.Reading
 
 	mu sync.Mutex
-	// afterFn / restFn 覆盖默认行为 ( 脚本化的增量与遗言 )；测试随时换剧本、
-	// 引擎随时读，用锁同步。
+	// afterFn / restFn 覆盖默认行为 ( 脚本化的增量与遗言 )；
+	// 测试随时换剧本、引擎随时读，用锁同步。
 	afterFn      func(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error)
 	restFn       func(ctx context.Context, session, address string, cur state.Cursor) ([]core.Item, error)
 	DialogNow    *core.AgentDialog
@@ -607,6 +628,8 @@ func (f *FakeHC) SetScreen(address, text string) {
 }
 
 // ClearSents / ClearKeys 清空发送与按键记录 ( 锁内 )。
+func (f *FakeHC) ClearRuns() { f.mu.Lock(); defer f.mu.Unlock(); f.Runs = nil }
+
 func (f *FakeHC) ClearSents() { f.mu.Lock(); defer f.mu.Unlock(); f.Sent = nil }
 func (f *FakeHC) ClearKeys()  { f.mu.Lock(); defer f.mu.Unlock(); f.Keyed = nil }
 
@@ -645,6 +668,33 @@ func (f *FakeHC) HomeShell(ctx context.Context, session, machine, script string)
 		return "", nil
 	}
 	return string(out), nil
+}
+
+// HomeFile 读 fake 的 home 下真实文件 ( tail>0 取尾部 )：
+// reader 的日志通路用它对着真实文件系统测。
+func (f *FakeHC) HomeFile(ctx context.Context, session, machine, rel string, tail int) (string, error) {
+	if machine != "" {
+		script := "cat '" + rel + "'"
+		if tail > 0 {
+			script = fmt.Sprintf("tail -n %d '%s'", tail, rel)
+		}
+		return f.HomeShell(ctx, session, machine, script)
+	}
+	path := filepath.Join(f.homeDir(), rel)
+	//nolint:gosec // G304: 路径由测试在自己的 home 里拼。
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	text := string(data)
+	if tail > 0 {
+		lines := strings.Split(text, "\n")
+		if len(lines) > tail {
+			lines = lines[len(lines)-tail:]
+		}
+		text = strings.Join(lines, "\n")
+	}
+	return text, nil
 }
 
 func (f *FakeHC) homeDir() string {

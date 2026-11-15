@@ -18,13 +18,38 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// 来自聊天侧的入口 ( spec §6.8，移植自原版 engine.mjs 的 from the chat 一节 )。
-
+// 来自聊天侧的入口。
 var answerRe = regexp.MustCompile(`^/answer\s+([\s\S]+)$`)
 
-// onMessage：直聊是命令 ( /ls、/new、/kill 与帮助 )；房间里的话送进终端。
+// waitHintRe 是确认类对话框底部的提示行 ( "Enter to confirm · Esc to cancel"、
+// Press enter to continue、↑/↓ Navigate · enter Confirm )。
+var waitHintRe = regexp.MustCompile(`(?i)enter[^\n]{0,40}(confirm|continue)|navigate[^\n]{0,20}enter`)
+
+// cursorSelects：光标 ( ❯ › > ) 选中了一个非空选项——空闲提示符的光标行是空的，不会命中。
+var cursorSelectsRe = regexp.MustCompile(`(?m)^\s*[❯›>]\s*\S`)
+
+// screenWaitsConfirm 屏幕上有一个等确认的对话框 ( 信任确认这类，hc 不报 blocked 的 )。
+// 判据来自 testdata/screens 的真实语料：尾部的确认提示行 + ( 编号菜单 | 光标选中的选项 )，两条都要有，宁漏勿拦。
+func screenWaitsConfirm(screen string) bool {
+	lines := strings.Split(screen, "\n")
+	if n := len(lines); n > 8 {
+		lines = lines[n-8:]
+	}
+	tail := strings.Join(lines, "\n")
+	if !waitHintRe.MatchString(tail) {
+		return false
+	}
+	return core.MenuOf(screen) != nil || cursorSelectsRe.MatchString(screen)
+}
+
+// onMessage 直聊是命令 ( /ls、/new、/kill 与帮助 )；房间里的话送进终端。
 func (e *Engine) onMessage(in core.Incoming) {
 	if e.ctx == nil || e.ctx.Err() != nil {
+		return
+	}
+	if in.Room == "" && !e.Chat.Ready() {
+		// 没有 owner：只认配对码。
+		e.tryPairing(in)
 		return
 	}
 	if in.Room == "" {
@@ -78,6 +103,8 @@ func (e *Engine) direct(where core.Where, text string) {
 		e.refreshOverview(true)
 	case "/new":
 		reply(e.newTerminal(args))
+	case "/clean":
+		reply(e.cleanEnded(args, where))
 	case "/kill":
 		if len(args) < 2 || !e.knownSession(args[0]) {
 			reply("give `/kill <session> <address>`")
@@ -103,13 +130,15 @@ func (e *Engine) help() string {
 		"`/ls` a new overview of every terminal (the overview also keeps itself up to date)",
 		"`/new <session> <space>/<tab> [command]` start a terminal (default `claude`); `--cwd <dir>` first to pick its folder",
 		"`/kill <session> <address>` end a terminal",
+		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
 		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
 	}
 	return strings.Join(lines, "\n")
 }
 
-// newTerminal：/new 起一个终端 ( spec §6.8 )。space 复用同 space 兄弟终端的
-// herdr.space 标签，没有就生成；登录 shell + exec，免得留下一个光壳 shell。
+// newTerminal：/new 起一个终端。
+// space 复用同 space 兄弟终端的 herdr.space 标签，没有就生成；
+// 登录 shell + exec，免得留下一个光壳 shell。
 // ( herdr-app 里的 tab 命名随 M7 的 nameTab 一起来。 )
 func (e *Engine) newTerminal(args []string) string {
 	cwd := ""
@@ -122,6 +151,7 @@ func (e *Engine) newTerminal(args []string) string {
 	if len(args) < 2 {
 		return "give `/new <session> <space>/<tab> [command]`"
 	}
+
 	session, place := args[0], args[1]
 	command := args[2:]
 	if !e.knownSession(session) {
@@ -133,18 +163,28 @@ func (e *Engine) newTerminal(args []string) string {
 	}
 	space, tab := place[:slash], place[slash+1:]
 	spaceID := "sp" + randHex()
-	folder := cwd
-	if folder == "" {
-		folder = homeDir()
+
+	// 工作目录只认 $HOME 之下的相对路径：$HOME 本身太宽 ( 一个终端会把整个
+	// home 当仓库，agent 的信任确认也因此每次都来 )，越出 $HOME 的相对路径
+	// ( ../ ) 同样不收。
+	home := e.homeDirOr()
+	folder := ""
+	if cwd != "" {
+		if strings.HasPrefix(cwd, "/") || strings.HasPrefix(cwd, "~") {
+			return "give `--cwd` a folder under your home (relative), not `" + cwd + "`"
+		}
+		folder = filepath.Join(home, cwd)
 	}
-	// 同 space 的兄弟终端：沿用它的 space id 与工作目录。
+
+	// 同 space 的兄弟终端：沿用它的 space id 与工作目录 ( 在 $HOME 之内的才沿
+	// 用；老终端落在 $HOME 的不学 )。
 	if v := e.viewOf(session); v != nil {
 		for _, t := range v.All() {
 			if s, _, ok := hccli.SplitWhere(t.Where()); ok && s == space && t.Label("herdr.space") != "" {
 				spaceID = t.Label("herdr.space")
-				if cwd == "" {
+				if folder == "" {
 					if fg, _ := t["foreground"].(map[string]any); fg != nil {
-						if c, _ := fg["cwd"].(string); c != "" {
+						if c, _ := fg["cwd"].(string); c != "" && c != home && strings.HasPrefix(c, home+string(filepath.Separator)) {
 							folder = c
 						}
 					}
@@ -152,6 +192,9 @@ func (e *Engine) newTerminal(args []string) string {
 				break
 			}
 		}
+	}
+	if folder == "" || folder == home || !strings.HasPrefix(folder, home+string(filepath.Separator)) {
+		return "give `--cwd <folder under your home>`: a new terminal cannot work in $HOME itself"
 	}
 	line := "claude"
 	if len(command) > 0 {
@@ -189,16 +232,18 @@ func addressOfRun(out []byte) string {
 	return "?"
 }
 
-// typeInto：把一段文本送进终端——/history、/screen、/esc、/answer 这些房间
-// 命令之外，被对话框挡住时先暂存 ( 永不丢弃 )，正常时 hc send。
+// typeInto 把一段文本送进终端——/history、/screen、/esc、/answer 这些房间命令之外，
+// 被对话框挡住时先暂存 ( 永不丢弃 )，正常时 hc send。
 func (e *Engine) typeInto(where core.Where, message core.Message, session, address, text string) error {
 	record, ok := e.viewOf(session).Get(address)
 	if !ok || !record.Live() {
 		_, err := e.Chat.Reply(e.ctx, where, EndedReply)
 		return err
 	}
+
 	reader := e.agentOf(record)
 	k := e.keyOf(session, address)
+
 	switch text {
 	case "/commands":
 		return e.onCommands(session, record)
@@ -221,11 +266,13 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 		_, err := e.Chat.Reply(e.ctx, where, e.screen(session, address, ScreenLines))
 		return err
 	}
+
 	force := false
 	typed := text
 	if m := answerRe.FindStringSubmatch(text); m != nil {
 		typed, force = m[1], true
 	}
+
 	// 现在是否被挡住：问 hc 实时状态 ( 事件侧可能慢半拍 )。
 	if !force && reader != nil {
 		if term, err := e.HC.GetTerminal(e.ctx, session, address); err == nil && (term.State() == stateBlocked || asks.AskOf(term) != "") {
@@ -257,6 +304,14 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 				}
 			}
 			_, err := e.Chat.Reply(e.ctx, where, "It asks something first (the card above). Your message goes in once that is answered.")
+			return err
+		}
+	}
+	// 发之前看一眼屏幕：新生终端可能停在它自己的确认上 ( Claude/Codex 的目 // 录信任这一类 ) —— hc 不报 blocked、菜单常常没有编号，盲发的话文本连着
+	// 回车一起进去，恰好确认了高亮的 "No, exit"，终端当场退出。屏幕在等确认就一个字都不发，把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
+	if !force {
+		if screen := e.screen(session, address, ScreenLines); screenWaitsConfirm(screen) {
+			_, err := e.Chat.Reply(e.ctx, where, "It waits on its own confirm (trust this folder?) — nothing was typed, so it stays put. Answer it in herdr-app: the ❯ marks the choice, Enter confirms, Esc cancels (and ends it).\n\n```\n"+hccli.TidyScreen(screen, DialogLines)+"\n```")
 			return err
 		}
 	}
@@ -294,7 +349,7 @@ func whereLabel(where core.Where) string {
 	return string(where.Room)
 }
 
-// hold：暂存对话框期间的消息 ( 进 state，重启不丢 )。
+// hold 暂存对话框期间的消息 ( 进 state，重启不丢 )。
 func (e *Engine) hold(k string, m state.WaitingMsg) {
 	st := e.read()
 	if st.Waiting == nil {
@@ -304,7 +359,7 @@ func (e *Engine) hold(k string, m state.WaitingMsg) {
 	e.write(st)
 }
 
-// sendWaiting：对话框让开了，暂存的消息按序送进终端。
+// sendWaiting 对话框让开了，暂存的消息按序送进终端。
 func (e *Engine) sendWaiting(k string) {
 	st := e.read()
 	held := st.Waiting[k]
@@ -335,7 +390,7 @@ func extOf(head []byte) string {
 	return "png"
 }
 
-// imagesInto：你发到房间的图片——落地、`hc put` 到终端旁边 ( 它的机器上 )，
+// imagesInto 你发到房间的图片——落地、`hc put` 到终端旁边 ( 它的机器上 )，
 // 再把路径随文字一起输入 ( Claude Code 这类 agent 会自己打开 )。
 func (e *Engine) imagesInto(message core.Message, session, address string, refs [][]byte) []string {
 	if len(refs) == 0 || e.Inbox == "" {
@@ -386,6 +441,14 @@ func truncateRunes(s string, n int) string {
 		return s
 	}
 	return string(runes[:n]) + "…"
+}
+
+// homeDirOr 优先用注入的 HomeDir ( 测试隔离 )，退回真实 home。
+func (e *Engine) homeDirOr() string {
+	if e.HomeDir != "" {
+		return e.HomeDir
+	}
+	return homeDir()
 }
 
 func homeDir() string {

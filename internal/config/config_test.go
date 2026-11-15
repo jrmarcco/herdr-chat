@@ -11,21 +11,19 @@ import (
 
 var idTagRe = regexp.MustCompile(`^work-[0-9a-f]{6}$`)
 
-// 重复字面量收拢为常量 ( goconst )。
 const (
 	spaceAll     = "all"
 	partFile     = "file"
 	partFolded   = "folded"
 	bothParts    = "file,folded"
-	keyBotToken  = "TELEGRAM_BOT_TOKEN" //nolint:gosec // G101: 配置键名而非凭证值
+	keyBotToken  = "TELEGRAM_BOT_TOKEN" //nolint:gosec // G101: 配置键名而非凭证值。
 	envProfile   = "HERDRCHAT_PROFILE"
 	envHerdrHome = "HERDRCHAT_HOME"
 	profileWork  = "work"
 )
 
-// 转录自原版 test/config.test.mjs：spaces、开关、places、parts 与
-// setConfigValue。配对测试随 pairing 一起移植。
-
+// 表驱动用例：
+// spaces、开关、places、parts 与 setConfigValue。配对测试随 pairing 一起移植。
 func TestSpacesOf(t *testing.T) {
 	cases := []struct {
 		value    string
@@ -73,7 +71,13 @@ func TestPlaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Places{Profile: DefaultSession, ID: DefaultSession, ConfigDir: "/h/.config/herdrchat/default", StateDir: "/h/.local/state/herdrchat/default", Terminal: "herdrchat"}
+	want := Places{
+		Profile:   DefaultSession,
+		ID:        DefaultSession,
+		ConfigDir: "/h/.config/herdrchat/default",
+		StateDir:  "/h/.local/state/herdrchat/default",
+		Terminal:  "herdrchat",
+	}
 	if base != want {
 		t.Errorf("base = %+v, want %+v", base, want)
 	}
@@ -91,6 +95,7 @@ func TestPlaces(t *testing.T) {
 	if xdg.ConfigDir != "/c/herdrchat/default" || xdg.StateDir != "/s/herdrchat/default" {
 		t.Errorf("xdg = %+v", xdg)
 	}
+
 	// XDG 移动过的目录同样带短标签。
 	if !strings.HasPrefix(xdg.Terminal, "herdrchat-default-") || len(xdg.Terminal) != len("herdrchat-default-")+6 {
 		t.Errorf("xdg.Terminal = %q, want herdrchat-default-<6 hex>", xdg.Terminal)
@@ -102,6 +107,7 @@ func TestPlaces(t *testing.T) {
 	if moved.ConfigDir != "/my/hc" || moved.StateDir != "/my/hc/state" {
 		t.Errorf("moved = %+v", moved)
 	}
+
 	// 挪动过的安装绝不与惯常位置共享终端或服务名。
 	if !idTagRe.MatchString(moved.ID) {
 		t.Errorf("moved.ID = %q, want work-<6 hex>", moved.ID)
@@ -155,8 +161,8 @@ func TestPartsOf(t *testing.T) {
 }
 
 func TestSetConfigValue(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "config.env")
+	dir := t.TempDir
+	file := filepath.Join(dir(), "config.env")
 	if err := os.WriteFile(file, []byte("# a comment\n"+keyBotToken+"=\nHERDR_SESSIONS=\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +172,9 @@ func TestSetConfigValue(t *testing.T) {
 	if err := SetConfigValue(file, "TELEGRAM_OWNER_ID", "42"); err != nil {
 		t.Fatal(err)
 	}
-	text, err := os.ReadFile(file) //nolint:gosec // G304: 测试临时目录内的文件
+
+	//nolint:gosec // G304: 测试临时目录内的文件。
+	text, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +182,7 @@ func TestSetConfigValue(t *testing.T) {
 	if string(text) != want {
 		t.Errorf("file = %q, want %q", text, want)
 	}
+
 	info, err := os.Stat(file)
 	if err != nil {
 		t.Fatal(err)
@@ -184,8 +193,8 @@ func TestSetConfigValue(t *testing.T) {
 }
 
 func TestParseEnvQuotes(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "config.env")
+	dir := t.TempDir
+	file := filepath.Join(dir(), "config.env")
 	if err := os.WriteFile(file, []byte("A=plain\nB = spaced \nC=\"quoted\"\nD='single'\n# comment\nno good line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -201,15 +210,15 @@ func TestParseEnvQuotes(t *testing.T) {
 	if _, ok := env["no"]; ok {
 		t.Errorf("malformed line must be skipped")
 	}
-	missing, err := ParseEnv(filepath.Join(dir, "absent.env"))
+	missing, err := ParseEnv(filepath.Join(dir(), "absent.env"))
 	if err != nil || missing == nil || len(missing) != 0 {
 		t.Errorf("missing file: %v %v", missing, err)
 	}
 }
 
 func TestLoad(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "config.env")
+	dir := t.TempDir
+	file := filepath.Join(dir(), "config.env")
 	if err := os.WriteFile(file, []byte(keyBotToken+"=1:abc\nHERDR_SESSIONS=a, b\nHERDR_HISTORY=folded\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +232,7 @@ func TestLoad(t *testing.T) {
 	if !cfg.History["folded"] || cfg.History["file"] {
 		t.Errorf("history = %v", cfg.History)
 	}
+
 	// 空的 HERDR_SESSIONS 即 hc 自己的 session。
 	if writeErr := os.WriteFile(file, []byte(keyBotToken+"=x\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
@@ -234,10 +244,12 @@ func TestLoad(t *testing.T) {
 	if !sameStrings(cfg.Sessions, []string{DefaultSession}) || cfg.SessionsSet {
 		t.Errorf("sessions = %v set=%v", cfg.Sessions, cfg.SessionsSet)
 	}
+
 	// 缺失的必填键要说出缺什么、在哪补。
 	if writeErr := os.WriteFile(file, []byte("\n"), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
+
 	_, err = Load(file, nil, []string{keyBotToken, "TELEGRAM_OWNER_ID"})
 	if err == nil || !strings.Contains(err.Error(), keyBotToken+", TELEGRAM_OWNER_ID are empty") {
 		t.Errorf("missing keys: err = %v", err)

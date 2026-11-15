@@ -1,0 +1,55 @@
+# goreleaser：打 tag ( v* ) 出一个 release。`herdrchat update` 下载的就是
+# 这里的产物——tar.gz 的名字 ( Linux_x86_64 / Darwin_aarch64 ) 与校验和文件
+# 的名字都写进了 update 命令，改这里要一起改。
+version: 2
+
+project_name: herdrchat
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: herdrchat
+    main: ./cmd/herdrchat
+    binary: herdrchat
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/jrmarcco/herdr-chat/internal/cliversion.Version={{ .Version }}
+
+archives:
+  - id: tarball
+    ids: [herdrchat]
+    formats: [tar.gz]
+    # herdrchat_<version>_<Os>_<arch>.tar.gz：update 命令按这个名字找
+    # ( Os 是首字母大写，amd64 写作 x86_64、arm64 写作 aarch64 )。
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{- title .Os }}_{{- if eq .Arch "amd64" }}x86_64{{- else if eq .Arch "arm64" }}aarch64{{- else }}{{ .Arch }}{{- end }}
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+
+release:
+  github:
+    owner: jrmarcco
+    name: herdr-chat
+  draft: false
+  prerelease: auto
+  mode: replace

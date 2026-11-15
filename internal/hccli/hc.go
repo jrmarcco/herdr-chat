@@ -1,11 +1,11 @@
-// Package hccli 是对 hc CLI 的薄封装：每次调用都指名 session ( HC_SESSION )，
-// 绝不落在默认 core 上；bot 自己跑在 hc 终端里，其环境中的 HC_TERMINAL_ID、
-// HC_SCOPE 与 HC_TERMINAL_SOCKET 会被剔掉——不剔的话，bot 输入的内容会被 hc
-// 包上 <hc from="tN"> 标签、当成另一个 agent 的留言，而不是像你亲手敲进去
-// 一样抵达。
+// Package hccli 是对 hc CLI 的薄封装：
+// 每次调用都指名 session ( HC_SESSION )，绝不落在默认 core 上；
+// bot 自己跑在 hc 终端里，其环境中的 HC_TERMINAL_ID、
+// HC_SCOPE 与 HC_TERMINAL_SOCKET 会被剔掉——不剔的话，
+// bot 输入的内容会被 hc 包上 <hc from="tN"> 标签、当成另一个 agent 的留言，
+// 而不是像你亲手敲进去一样抵达。
 //
-// 每次调用都带 deadline ( spec §12.3：没有 deadline 的 hc 调用属于 code-review
-// 驳回项 )；输出上限 16MB。
+// 每次调用都带 deadline；输出上限 16MB。
 package hccli
 
 import (
@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-// 各类调用的超时 ( spec §15 )。
+// 各类调用的超时。
 const (
 	TimeoutDefault = 15 * time.Second
 	TimeoutRun     = 30 * time.Second
@@ -46,11 +46,10 @@ var hcTerminalEnv = map[string]bool{
 
 // CLI 运行 hc。New 基于进程环境创建；测试则基于 stub 脚本与自带环境创建。
 type CLI struct {
-	// Bin 是 hc 的路径：先看本字段，再看环境里的 HERDRCHAT_HC，最后是裸的
-	// "hc" ( 跑 bot 的 core 所在环境 PATH 里未必有 hc，跑不起 hc 的 bot
-	// 什么也看不见 )。
+	// Bin 是 hc 的路径：先看本字段，再看环境里的 HERDRCHAT_HC，最后是裸的。
+	// "hc" ( 跑 bot 的 core 所在环境 PATH 里未必有 hc，跑不起 hc 的 bot 什么也看不见 )。
 	Bin string
-	// Env 是基础环境 ( New 时的 os.Environ() )。
+	// Env 是基础环境 ( New 时的 os.Environ )。
 	Env []string
 }
 
@@ -71,8 +70,8 @@ func (c *CLI) bin() string {
 	return "hc"
 }
 
-// envFor 构造一次调用的环境：去掉 bot 自身终端变量后的基础环境，
-// 加上 HC_SESSION=<session>。
+// envFor 构造一次调用的环境：
+// 去掉 bot 自身终端变量后的基础环境，加上 HC_SESSION=<session>。
 func (c *CLI) envFor(session string) []string {
 	env := make([]string, 0, len(c.Env)+1)
 	for _, kv := range c.Env {
@@ -85,19 +84,22 @@ func (c *CLI) envFor(session string) []string {
 	return append(env, "HC_SESSION="+session)
 }
 
-// Run 运行一条 hc 命令并返回 stdout。错误携带命令与 hc 自己的话：
-// `hc <args>: <stderr || stdout || 原因>`。
+// Run 运行一条 hc 命令并返回 stdout。
+// 错误携带命令与 hc 自己的话：`hc <args>: <stderr || stdout || 原因>`。
 func (c *CLI) Run(parent context.Context, session string, args []string, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		timeout = TimeoutDefault
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, c.bin(), args...) //nolint:gosec // G204: hc 路径与参数来自本机配置和引擎自身，非不可信输入
+
+	//nolint:gosec // G204: hc 路径与参数来自本机配置和引擎自身，非不可信输入。
+	cmd := exec.CommandContext(ctx, c.bin(), args...)
 	cmd.Env = c.envFor(session)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("hc %s: timed out after %s", strings.Join(args, " "), timeout)
@@ -217,8 +219,7 @@ func (c *CLI) Send(ctx context.Context, session, address, text string, force boo
 	return err
 }
 
-// PutFile 把本地文件送到终端旁边、它所在的机器上；返回文件在那边落地的
-// 路径。
+// PutFile 把本地文件送到终端旁边、它所在的机器上；返回文件在那边落地的路径。
 func (c *CLI) PutFile(ctx context.Context, session, address, localFile string) (string, error) {
 	out, err := jsonRun[struct {
 		Path string `json:"path"`
@@ -272,8 +273,7 @@ func SplitWhere(where string) (space, tab string, ok bool) {
 	return where[:i], where[i+3:], true
 }
 
-// MachineOf 说出地址所在的机器 ( "box/t4t" 中的 "box" )；终端在本机时
-// 返回 ""。
+// MachineOf 说出地址所在的机器 ( "box/t4t" 中的 "box" )；终端在本机时返回 ""。
 func MachineOf(address string) string {
 	i := strings.LastIndex(address, "/")
 	if i < 0 {
@@ -311,7 +311,7 @@ func PlainError(err error) string {
 			}
 		}
 	}
-	// Drop the "hc <args>: " the wrapper added.
+
 	if after, ok := strings.CutPrefix(raw, "hc "); ok {
 		if j := strings.Index(after, ": "); j >= 0 {
 			return after[j+2:]
@@ -340,8 +340,13 @@ func TidyScreen(text string, last int) string {
 	return strings.Join(lines, "\n")
 }
 
-// StateRoot 是 hc 存各 session 状态的地方 ( 拿不存在的 session 去问 hc 会
-// 把它启动：一次手误不能凭空造出一个 session )。
+// ScreensDir 是一个 session 的屏幕快照目录 ( hc 写下的 <地址>.snap )。
+func ScreensDir(env map[string]string, home, session string) string {
+	return filepath.Join(StateRoot(env, home), session, "screens")
+}
+
+// StateRoot 是 hc 存各 session 状态的地方
+// ( 拿不存在的 session 去问 hc 会把它启动：一次手误不能凭空造出一个 session )。
 func StateRoot(env map[string]string, home string) string {
 	if v := env["XDG_STATE_HOME"]; v != "" {
 		return filepath.Join(v, "herdr-core")
@@ -368,42 +373,50 @@ func SessionsHere(env map[string]string, home string) []string {
 	return names
 }
 
-// CoreUp 判断一个 session 的 hc core 是否在跑，且不惊动它：它的 socket
-// ( 记在 core.lock 首行 ) 能否接受连接。
+// CoreUp 判断一个 session 的 hc core 是否在跑，且不惊动它：
+// 它的 socket ( 记在 core.lock 首行 ) 能否接受连接。
 func CoreUp(ctx context.Context, env map[string]string, home, session string, timeout time.Duration) bool {
-	text, err := os.ReadFile(filepath.Join(StateRoot(env, home), session, "core.lock")) //nolint:gosec // G304: 路径由 XDG 布局拼出，非不可信输入
+	//nolint:gosec // G304: 路径由 XDG 布局拼出，非不可信输入。
+	text, err := os.ReadFile(filepath.Join(StateRoot(env, home), session, "core.lock"))
 	if err != nil {
 		return false
 	}
+
 	socket := strings.TrimSpace(strings.SplitN(string(text), "\n", 2)[0])
 	dialer := net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, "unix", socket)
 	if err == nil {
-		_ = conn.Close() // 探活连接，关闭失败不影响结论
+		// 探活连接，关闭失败不影响结论。
+		_ = conn.Close()
 		return true
 	}
-	return false // 探活失败即"不在跑"，是结论不是错误
+	// 探活失败即"不在跑"，是结论不是错误。
+	return false
 }
 
-// HomeShell 在终端所在机器的 home 目录跑一条短 shell 命令 ( spec §8.2 )：
-// 本机直接 sh -c，远端经 `hc exec --on` ( 其 cwd 即那边的 home )。失败时输出
-// 视为空 ( 与原版 homeShell 一致：读 hook 状态的探针不该炸 )。
+// HomeShell 在终端所在机器的 home 目录跑一条短 shell 命令：
+// 本机直接 sh -c，远端经 `hc exec --on` ( 其 cwd 即那边的 home )。
+// 失败时输出视为空 ( 与原版 homeShell 一致：读 hook 状态的探针不该炸 )。
 func (c *CLI) HomeShell(ctx context.Context, session, machine, script string) (string, error) {
 	if machine == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			home = "."
 		}
-		cmd := exec.CommandContext(ctx, "sh", "-c", script) //nolint:gosec // G204: 脚本由引擎拼出，非外部输入
+
+		//nolint:gosec // G204: 脚本由引擎拼出，非外部输入。
+		cmd := exec.CommandContext(ctx, "sh", "-c", script)
 		cmd.Dir = home
 		out, err := cmd.Output()
 		if err != nil && len(out) == 0 {
 			return "", nil
 		}
+
 		return string(out), nil
 	}
 	if text, err := c.Run(ctx, session, []string{"exec", "--on", machine, "sh", "-c", script}, 30*time.Second); err == nil {
 		return text, nil
 	}
-	return "", nil // 失败输出视为空是协议 ( 探针不该炸 )
+	// 失败输出视为空是协议 ( 探针不该炸 )。
+	return "", nil
 }

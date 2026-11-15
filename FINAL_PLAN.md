@@ -132,7 +132,8 @@ func Probe(session string) Capabilities // 启动时 + 每 60s cores 刷新时
 | 1.12.0 | footer 显示 harness/model；OpenCode 显示 GLM Coding Plan 限额；若干 footer 修复 | GLM 限额并入 **M4** 的 opencode meter（golden 样本从上游 test 提取）；footer 措辞以 1.12 为准 |
 | 其他小修 | 文案/崩溃修复 | 每里程碑收尾 diff 上游 CHANGELOG，凡涉及**常量表（spec §15）或 state 字段**的改动记入本节"漂移日志"，其余忽略 |
 
-漂移日志（执行时追加）：_（空）_
+漂移日志（执行时追加）：
+- 2026-11-14 · 1.11 `herdrchat update` → **M7.5 已落地**：goreleaser 发布链路（`.goreleaser.yaml` + `.github/workflows/release.yml`，tag `v*` 出 release）+ `herdrchat update [--check]`（查 latest → 下载本平台 tar.gz + checksums → sha256 校验 → 原子替换 → 服务重启 / SIGTERM 心跳 pid 由 hc 终端循环拉起）+ bot 内新版提示（起跑 30s 后 + 每 24h 问一次，`state.updateNoticed` 同版只提示一次，只提示不自动升级）。
 
 ## 4. 修订后的里程碑与验收
 
