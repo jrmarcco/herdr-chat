@@ -7,3 +7,6 @@
 
 # 本地试验
 *.local.env
+
+# ZCode 会话产物
+.zcode/

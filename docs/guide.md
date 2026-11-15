@@ -5,8 +5,8 @@ How herdrchat works and every setting, for when the README is not enough.
 herdrchat is hc's chat client, as herdr-app is its desktop and phone client: every
 herdr-app tab, followed and answered in Feishu. It sits on one core (hc events, a
 reader per agent, dialogs, the overview), with the chat app behind one contract
-(`docs/architecture.md`); other apps may follow the same way. This build talks to
-Feishu only (`HERDRCHAT_CHAT`).
+([README.md](README.md), "Architecture"); other apps may follow the same way. This
+build talks to Feishu only (`HERDRCHAT_CHAT`).
 
 Words used here:
 
@@ -84,7 +84,7 @@ each agent a reader reads the agent's own records. The status hc reports names t
 | anything else | none | nothing by itself; what you type gets its screen in reply |
 
 On another machine, a reader reads the same files through `hc exec --on`. To add an
-agent: `docs/architecture.md`, "Adding an agent".
+agent: [README.md](README.md#extending), "Adding an agent".
 
 ## What a room shows
 
