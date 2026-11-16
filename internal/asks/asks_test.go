@@ -1,8 +1,9 @@
 package asks
 
 // 这里的测试锁的是 asks 与 ask.sh 之间的协议本身：
-// 正本脚本 ( internal/hooks 内嵌 ) 真跑一个来回——req 解析进 Ask、ans 原样
-// 从脚本嘴里出来；再加内存集的封顶与 Clip 的 rune 边界。
+// 正本脚本 ( internal/hooks 内嵌 ) 真跑一个来回。
+// req 解析进 Ask、ans 原样从脚本嘴里出来；
+// 再加内存集的封顶与 Clip 的 rune 边界。
 
 import (
 	"bytes"

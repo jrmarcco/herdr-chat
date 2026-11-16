@@ -1,5 +1,6 @@
 // Package chats 是两条插件缝中 chat app 一侧：
-// 每个 chat app ( 本构建只有飞书 ) 为 core 实现的契约 —— core 绝不 import 任何app，
+// 每个 chat app ( 本构建只有飞书 ) 为 core 实现的契约，
+// core 绝不 import 任何app，
 // app 也绝不 import 引擎。
 package chats
 
