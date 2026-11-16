@@ -26,7 +26,7 @@ import (
 
 // TestAskShSpeaksTheProtocol 让内嵌的 ask.sh 真跑一个来回 ( codex、无 hc 终端：整条路不需要 hc )：
 // 请求文件解析进 Ask，答案文件被原样打印，收场不留文件。
-// 脚本与 Go 各写一遍协议 ( 字段名、id 形状、目录、标签 )——形状漂移在这里现形。
+// 脚本与 Go 各写一遍协议 ( 字段名、id 形状、目录、标签 )，形状漂移在这里现形。
 func TestAskShSpeaksTheProtocol(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("ask.sh 是 POSIX sh")
@@ -83,7 +83,8 @@ func TestAskShSpeaksTheProtocol(t *testing.T) {
 		t.Fatalf("request id %q is not <seconds>-<pid>", id)
 	}
 
-	// 脚本写出的形状得解析进 Ask —— "at" 是不带引号的数字这类漂移在这里现形。
+	// 脚本写出的形状得解析进 Ask。
+	// "at" 是不带引号的数字这类漂移在这里现形。
 	//nolint:gosec // G304: 测试目录内的文件。
 	raw, err := os.ReadFile(filepath.Join(reqDir, id+".json"))
 	if err != nil {

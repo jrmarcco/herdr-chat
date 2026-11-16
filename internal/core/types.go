@@ -79,13 +79,22 @@ type Dialog struct {
 	// Selects 可选：与 Free 同一张表单里的下拉 ( /new 选 agent、session 这类 )——
 	// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走就得同表单。
 	Selects []Select
+	// Submit 可选：表单提交按钮的动词 ( 空 = "Start"；/kill 用 "End" )。
+	Submit string
 }
 
 // Select 是卡片表单里的一个下拉：表单字段名与候选，默认选第一个。
 // ( schema 2.0 的 select_static 不收标签文本，选项自己说明自己。 )
 type Select struct {
 	Name    string
-	Options []string
+	Options []SelectOption
+}
+
+// SelectOption 是下拉的一个候选：显示的与提交回来的可以是两回事
+// ( /kill 显示 "dev / jit (t25)"，提交回来 "default|t25" )。
+type SelectOption struct {
+	Label string
+	Value string
 }
 
 // DialogValue 是对话框卡片发出后携带的值，

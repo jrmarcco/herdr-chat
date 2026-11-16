@@ -283,6 +283,7 @@ type FakeHC struct {
 	// Execs / ExecFn 是 `hc exec --on` 的记录与剧本。
 	Execs   []ExecCall
 	ExecFn  func(session, machine, script string) (string, error)
+	Killed  []SetLabel
 	Sent    []SentText
 	Keyed   []SentKeys
 	Labeled []SetLabel
@@ -534,7 +535,19 @@ func (f *FakeHC) RunTerminal(ctx context.Context, session string, o hccli.RunOpt
 	return json.RawMessage(`{"address":"t99"}`), nil
 }
 
-func (f *FakeHC) Kill(ctx context.Context, session, address string) error { return nil }
+func (f *FakeHC) Kill(ctx context.Context, session, address string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Killed = append(f.Killed, SetLabel{Session: session, Address: address})
+	return nil
+}
+
+// Kills 列出收到的结束调用 ( 锁内拷贝 )。
+func (f *FakeHC) Kills() []SetLabel {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]SetLabel(nil), f.Killed...)
+}
 
 func (f *FakeHC) Label(ctx context.Context, session, address string, labels map[string]string) error {
 	f.mu.Lock()

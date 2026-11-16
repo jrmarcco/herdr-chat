@@ -299,7 +299,7 @@ func (s *sdkClient) CreateChat(ctx context.Context, name, description string) (s
 	return *resp.Data.ChatId, nil
 }
 
-// DeleteChat 解散群 ( im.v1 chat.delete；bot 须是群主——建群时就是 )。
+// DeleteChat 解散群 ( im.v1 chat.delete )。
 func (s *sdkClient) DeleteChat(ctx context.Context, chatID string) error {
 	req := larkim.NewDeleteChatReqBuilder().ChatId(chatID).Build()
 	resp, err := s.cli.Im.Chat.Delete(ctx, req)
@@ -432,8 +432,8 @@ const (
 )
 
 // ErrDuplicateTag：同名租户标签已在。飞书这种情形报 402 且响应里没有那个
-// 标签的 id，平台也没有按名查询的接口 ( 实测 2026-11；tag.list 只按 id 查 )——
-// id 无从得知，调用方只能放弃这次装饰。
+// 标签的 id，平台也没有按名查询的接口 ( 实测 2026-11；tag.list 只按 id 查 ) id 无从得知，
+// 调用方只能放弃这次装饰。
 type ErrDuplicateTag struct {
 	Name string
 }
@@ -443,7 +443,7 @@ func (e *ErrDuplicateTag) Error() string {
 }
 
 // CreateTag 建一个租户标签，返回它的 id；
-// 同名标签已在时飞书报重复并给出那个 id——拿来用即可 ( 重装或换机后标签不会成双 )；
+// 同名标签已在时飞书报重复并给出那个 id 拿来用即可 ( 重装或换机后标签不会成双 )；
 // 402 的形态拿不到 id，作为 ErrDuplicateTag 交回。
 func (s *sdkClient) CreateTag(ctx context.Context, name string) (string, error) {
 	tag := larkimv2.NewCreateTagBuilder().TagType(tagTypeTenant).Name(name).Build()

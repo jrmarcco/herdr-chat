@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
+	"github.com/jrmarcco/herdr-chat/internal/hccli"
 	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
@@ -57,13 +58,19 @@ func TestNewFolderRules(t *testing.T) {
 	}
 
 	// 旧语法：目录承自兄弟终端——在 home 内的沿用，落在 $HOME 的不学。
+	// ( 兄弟记录经 SetTerminal 换：直改 map 会与 sweep 的并发读赛跑。 )
+	sibling := func(cwd string) {
+		rec := term("t1")
+		rec["foreground"] = map[string]any{"name": "fake", keyCwd: cwd}
+		r.hc.SetTerminal("t1", hccli.Terminal(rec))
+	}
 	r.hc.ClearRuns()
-	r.hc.Terminals["t1"]["foreground"] = map[string]any{"cwd": filepath.Join(home, "work")}
+	sibling(filepath.Join(home, "work"))
 	if out := r.newOut("default api/n4"); len(r.hc.Runs) != 1 || r.hc.Runs[0].Opts.Cwd != filepath.Join(home, "work") {
 		t.Fatalf("sibling reuse: runs=%+v out=%q", r.hc.Runs, out)
 	}
 	r.hc.ClearRuns()
-	r.hc.Terminals["t1"]["foreground"] = map[string]any{"cwd": home}
+	sibling(home)
 	if out := r.newOut("default api/n5"); len(r.hc.Runs) != 0 || !containsAny(out, "/new <folder>") {
 		t.Fatalf("sibling in $HOME must not be reused: runs=%+v out=%q", r.hc.Runs, out)
 	}

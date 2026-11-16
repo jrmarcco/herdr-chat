@@ -528,8 +528,10 @@ func (c *Chat) onCardAction(data map[string]any) map[string]any {
 	c.mu.Lock()
 	h := c.handlers
 	c.mu.Unlock()
+
 	out, err := h.OnAction(core.Click{Value: core.DialogValue(value), Message: core.Message(messageID), Answer: answer, Form: fields})
-	_ = ticks // ticks 已在 value 里 ( form_value 的 box_<n> 键 )——引擎由 value["ticks"] 读
+	// ticks 已在 value 里 ( form_value 的 box_<n> 键 )，引擎由 value["ticks"] 读。
+	_ = ticks
 	if err != nil {
 		return map[string]any{kToast: map[string]any{kType: toastError, "content": truncate(err.Error(), 200)}}
 	}
@@ -653,7 +655,7 @@ const tagDupCooldown = time.Hour
 
 // tagOf 建/取一个 scope 的租户标签 ( id 存 state.tags )。
 // 同名标签占了名字而拿不到 id ( ErrDuplicateTag ) 时装饰退位：
-// 返回空 id、不报错——不绑标签，也绝不拦住房间的其他事；
+// 返回空 id、不报错、不绑标签，也绝不拦住房间的其他事；
 // 冷却一过再试 ( tagDupAt )。
 func (c *Chat) tagOf(ctx context.Context, scope string) (string, error) {
 	st, _ := c.Store.Read()
@@ -854,7 +856,7 @@ func (c *Chat) PostDialog(ctx context.Context, room core.Room, d core.Dialog, v 
 		if d.Menu.Free != nil {
 			placeholder = d.Menu.Free.Label
 		}
-		cardJSON = NewCard(d.Title, d.Markdown, placeholder, d.Footer, d.Selects, value)
+		cardJSON = NewCard(d.Title, d.Markdown, placeholder, d.Footer, d.Submit, d.Selects, value)
 	case d.Menu != nil:
 		cardJSON = MenuCard(d.Title, d.Markdown, d.Menu, value, d.Footer)
 	default:

@@ -167,6 +167,7 @@ func (e *Engine) closeCard(k string, done string) {
 		return
 	}
 	e.dropOpenCard(k)
+
 	var dialog core.Dialog
 	_ = json.Unmarshal(oc.Dialog, &dialog)
 	if err := e.Chat.CloseDialog(e.ctx, core.Message(oc.Message), dialog, done); err != nil {
@@ -183,7 +184,13 @@ func dialogOf(statusWord string, screenText, footer string) core.Dialog {
 	if statusWord != "" {
 		title = NeedsTitle + " (" + statusWord + ")"
 	}
-	d := core.Dialog{Menu: menu, Title: title, DoneTitle: DoneTitle, Footer: footer}
+
+	d := core.Dialog{
+		Menu:      menu,
+		Title:     title,
+		DoneTitle: DoneTitle,
+		Footer:    footer,
+	}
 	switch {
 	case menu == nil || menu.Keys != nil:
 		d.Markdown = "```\n" + hccli.TidyScreen(screenText, DialogLines) + "\n```"
@@ -204,6 +211,7 @@ func agentDialog(d *core.AgentDialog, status hccli.Terminal) core.Dialog {
 			menu.Free = &free
 		}
 	}
+
 	kind := d.Kind
 	if kind == "" {
 		if s, _ := status["status"].(map[string]any); s != nil {
@@ -213,6 +221,7 @@ func agentDialog(d *core.AgentDialog, status hccli.Terminal) core.Dialog {
 			kind = "question"
 		}
 	}
+
 	title := NeedsTitle + " (" + kind + ")"
 	if d.Title != "" {
 		title = NeedsTitle + " (" + d.Title + ")"
@@ -538,6 +547,11 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 		return e.onNewCard(click, v)
 	}
 
+	// /kill 的终端卡：下拉点名，提交即结束。
+	if v.K == killKey {
+		return e.onKillCard(click)
+	}
+
 	shown, known := e.dialogAt(click.Message)
 	if !known {
 		shown = core.Dialog{Title: NeedsTitle, DoneTitle: DoneTitle}
@@ -574,17 +588,19 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 	if v.S == "" || v.A == "" {
 		return core.ActionResult{Toast: "This card is not a terminal's."}, nil
 	}
+
 	record, live := e.viewOf(v.S).Get(v.A)
 	if !live || !record.Live() {
 		xlog.For("engine").Info("点击未送达：终端已结束", "session", v.S, "address", v.A)
 		return answeredToast("The terminal has ended."), nil
 	}
+
 	term, err := e.HC.GetTerminal(e.ctx, v.S, v.A)
 	if err != nil {
 		return core.ActionResult{Toast: core.UserWords(err)}, nil
 	}
-	k := e.keyOf(v.S, v.A)
 
+	k := e.keyOf(v.S, v.A)
 	// 通路 A：agent 自己上报的卡，沿它的 API 回答，不碰终端按键。
 	if shown.Menu != nil && shown.Menu.Own != nil {
 		return e.answerOwn(click, v, record, term, k)
@@ -605,6 +621,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 				Card:  doneLook(shown, "It no longer waits on this."),
 			}, nil
 		}
+
 		// 手里的卡变成屏幕现在问的，请再点一次。
 		// 绝不另发新卡：新卡会被 "已发过" 拦下，那就没人可答、你的消息全干等。
 		now := dialogOf(term.State(), screenText, shown.Footer)
@@ -618,9 +635,11 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 		if oc, ok := e.openCardOf(k); ok && oc.Message != string(click.Message) {
 			e.closeCard(k, "It moved on; see the next card.")
 		}
+
 		e.mu.Lock()
 		e.postedDialog[k] = dialogName(now, term)
 		e.mu.Unlock()
+
 		e.remember(click.Message, now)
 		e.setOpenCard(k, click.Message, now)
 		return core.ActionResult{
@@ -650,6 +669,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 				wanted.Options[i].Checked = &on
 			}
 		}
+
 		for _, o := range wanted.Options {
 			if o.Checked == nil {
 				continue
@@ -678,6 +698,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 				ticked = append(ticked, o.Label)
 			}
 		}
+
 		if len(ticked) == 0 {
 			picked = "nothing ticked"
 		} else {
@@ -706,6 +727,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 			xlog.For("engine").Info("点击未按键：选项已变", "session", v.S, "address", v.A, "pick", v.Pick)
 			return answeredToast("The options changed; nothing was pressed."), nil
 		}
+
 		if menu.Free != nil && option.N == menu.Free.N {
 			text := strings.TrimSpace(click.Answer)
 			if text == "" {

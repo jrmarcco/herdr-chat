@@ -87,8 +87,8 @@ func main() {
 }
 
 // isTTY 老老实实问终端本身：
-// stty 只在一个真 tty 的 stdin 上成功 —— /dev/null ( 也是字符设备 )，
-// ModeCharDevice 分不出来它。
+// stty 只在一个真 tty 的 stdin 上成功。
+// /dev/null ( 也是字符设备 )，ModeCharDevice 分不出来它。
 // stty 不在就退而求其次。
 func isTTY(f *os.File) bool {
 	cmd := exec.CommandContext(context.Background(), "stty", "-a")

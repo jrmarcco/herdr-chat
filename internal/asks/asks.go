@@ -181,7 +181,7 @@ func (a *Asks) AskOpen(ctx context.Context, session, machine, id string) bool {
 	return strings.TrimSpace(out) == "open"
 }
 
-// AsksHere 判断本机是否有请求在等：看一眼目录，不起 shell——可以每几秒问一次。
+// AsksHere 判断本机是否有请求在等：看一眼目录，不起 shell 可以每几秒问一次。
 func (a *Asks) AsksHere() bool {
 	entries, err := os.ReadDir(filepath.Join(a.homeDir, AsksDir, "req"))
 	if err != nil {

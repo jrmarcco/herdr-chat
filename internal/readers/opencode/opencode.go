@@ -635,7 +635,7 @@ func trimFloat(f float64) string {
 
 // zhipuLimits 问智谱自己的用量插件问的那个接口。
 // key 只在这一次请求里持有，绝不落盘、绝不入日志，也只发给它本来就在用的主机。
-// 任何一步不如预期都不给限额——footer 略去，绝不编 0%。
+// 任何一步不如预期都不给限额 footer，绝不编 0%。
 func (r *Reader) zhipuLimits(ctx context.Context, session, machine, cwd, provider string) []core.Limit {
 	host := ZhipuHost(provider)
 	if host == "" {

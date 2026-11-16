@@ -237,7 +237,8 @@ delivered (the terminal has ended) says so plainly.
   space), `/sessions` (the hc sessions on this machine, which the bot follows, and each
   core's state; `/sessions add|drop <name>` changes what it follows — saved, then the
   bot starts again to apply; a session with live terminals is not dropped, and no
-  core is created from chat), `/kill <session> <address>`, `/clean` (clean up ended
+  core is created from chat), `/kill` (a card lists the live terminals by their groups'
+  names; pick one and it ends — `/kill <session> <address>` still works), `/clean` (clean up ended
   terminals' groups and stale screen files; it asks first), `/auth` (see below). Feishu can have a bot menu for `/ls`, help and `/auth` (set in the
   developer console:
   `skills/herdrchat/references/feishu.md`, "The bot menu").

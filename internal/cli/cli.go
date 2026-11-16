@@ -490,7 +490,7 @@ func sortedKeysOf(m map[string]string) []string {
 
 // PipeSafe 包一层输出：
 // 管道断掉 ( EPIPE 之类 ) 时不再写、
-// 叫 exit 安静收场 —— `herdrchat logs | head` 不该以一场报错误收场。
+// 叫 exit 安静收场，`herdrchat logs | head` 不该以一场报错误收场。
 func PipeSafe(w io.Writer, exit func()) io.Writer {
 	return pipeSafe{w: w, exit: exit}
 }

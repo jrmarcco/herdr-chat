@@ -117,8 +117,14 @@ func (e *Engine) direct(where core.Where, text string) {
 			reply(said)
 		}
 	case "/kill":
+		if len(args) == 0 {
+			if said := e.killTerminalCard(where); said != "" {
+				reply(said)
+			}
+			return
+		}
 		if len(args) < 2 || !e.knownSession(args[0]) {
-			reply("give `/kill <session> <address>`")
+			reply("give `/kill` (a card asks), or `/kill <session> <address>`")
 			return
 		}
 		if err := e.HC.Kill(e.ctx, args[0], args[1]); err != nil {
@@ -140,12 +146,77 @@ func (e *Engine) help() string {
 	lines := []string{
 		"`/ls` a new overview of every terminal (the overview also keeps itself up to date)",
 		"`/new` a card asks the folder and the agent; `/new <folder> [command]` starts one right away (default `claude`); `/new <session> <space>/<tab> [command]` names the place yourself",
-		"`/kill <session> <address>` end a terminal",
+		"`/kill` a card picks the terminal to end (or `/kill <session> <address>` by name)",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
 		"`/sessions` the sessions on this machine; `/sessions add|drop <name>` what the bot follows (it starts again to apply)",
 		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
 	}
 	return strings.Join(lines, "\n")
+}
+
+// killKey 是 /kill 终端卡的对话框 key ( onAction 据此拦截，不走终端 )。
+const killKey = "kill-terminal"
+
+// killTerminalCard：裸 /kill 的终端卡——下拉点名要结束的终端 ( 显示房间名，
+// 值回传 session|address )，提交即结束。/kill 与文字形态一样不做二次确认：
+// 选择 + Kill 两个动作已比打字郑重，且终端随时 /new 再起。
+func (e *Engine) killTerminalCard(where core.Where) string {
+	var options []core.SelectOption
+	for _, session := range e.Sessions {
+		if v := e.viewOf(session); v != nil {
+			for _, record := range v.All() {
+				if !record.Live() || !whereShown(record) || !e.handles(session, record.Address()) {
+					continue
+				}
+				space, tab := shownWhere(record)
+				options = append(options, core.SelectOption{
+					Label: e.roomName(space, tab, record) + " (" + record.Address() + ")",
+					Value: session + "|" + record.Address(),
+				})
+			}
+		}
+	}
+	if len(options) == 0 {
+		return "Nothing to end: no live terminal is shown."
+	}
+	dialog := core.Dialog{
+		Submit:    "End",
+		Title:     "🔚 End a terminal",
+		Markdown:  "Which one should end? Its group stays until `/clean`.",
+		DoneTitle: DoneTitle,
+		Menu:      &core.Menu{Key: killKey},
+		Selects:   []core.Select{{Name: "terminal", Options: options}},
+	}
+	if _, err := e.Chat.PostDialog(e.ctx, where.Room, dialog, map[string]any{"k": killKey}); err != nil {
+		xlog.For("engine").Warn("kill 卡发送失败", "error", err)
+		return "Not sent: " + hccli.PlainError(err) + "\n`/kill <session> <address>` ends one without the card."
+	}
+	return "" // 卡已发，不再回文字
+}
+
+// onKillCard：/kill 卡的提交。值是 session|address；终端可能已结束 ( 卡躺了一阵 )，
+// 如实告知。
+func (e *Engine) onKillCard(click core.Click) (core.ActionResult, error) {
+	v := valueOf(click)
+	if v.Pick == pickEsc {
+		return answeredToast("Cancelled. Nothing was ended."), nil
+	}
+	pick := strings.TrimSpace(click.Form["terminal"])
+	session, address, ok := strings.Cut(pick, "|")
+	if !ok || !e.knownSession(session) {
+		return core.ActionResult{Toast: "The card's terminal is unknown; send /kill again."}, nil
+	}
+	if record, live := e.viewOf(session).Get(address); !live || !record.Live() {
+		return answeredToast("The terminal has ended already."), nil
+	}
+	if err := e.HC.Kill(e.ctx, session, address); err != nil {
+		return core.ActionResult{Toast: "Not ended: " + hccli.PlainError(err)}, nil
+	}
+	done := fmt.Sprintf("Ended `%s` in %s. Its group stays until `/clean`.", address, session)
+	return core.ActionResult{
+		Toast: "✔ " + done,
+		Card:  &core.Look{Title: DoneTitle, Tone: core.ToneDone, Markdown: done},
+	}, nil
 }
 
 // sessionsCmd：/sessions —— 本机 hc session 一览与跟随范围。
@@ -313,11 +384,20 @@ func (e *Engine) firstSession() string {
 // 且只能选 bot 自己跟随的——不跟随的 session 开出来的终端没有镜像，
 // 等于黑洞。
 func (e *Engine) newCardSelects() []core.Select {
-	selects := []core.Select{{Name: "agent", Options: e.agentOptions()}}
+	selects := []core.Select{{Name: "agent", Options: pickOptions(e.agentOptions())}}
 	if len(e.Sessions) > 1 {
-		selects = append(selects, core.Select{Name: "session", Options: append([]string(nil), e.Sessions...)})
+		selects = append(selects, core.Select{Name: "session", Options: pickOptions(e.Sessions)})
 	}
 	return selects
+}
+
+// pickOptions 显示即值的选项串 ( /new 的 agent 与 session )。
+func pickOptions(values []string) []core.SelectOption {
+	out := make([]core.SelectOption, 0, len(values))
+	for _, v := range values {
+		out = append(out, core.SelectOption{Label: v, Value: v})
+	}
+	return out
 }
 
 // onNewCard：/new 卡的提交。目录输入与 agent 下拉同一张表单，一次带齐；

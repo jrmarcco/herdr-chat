@@ -10,8 +10,9 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
-// 租户标签重名 ( 402 拿不到 id )：装饰退位——
-// 不绑标签、不报错、不拦房间的其他事；冷却一过再试，建成了就绑上。
+// 租户标签重名 ( 402 拿不到 id )：
+// 装饰退位，不绑标签、不报错、不拦房间的其他事；
+// 冷却一过再试，建成了就绑上。
 
 // scopeDefault 是本测试反复用的 scope 名 ( hc 的 default session )。
 const scopeDefault = "default"

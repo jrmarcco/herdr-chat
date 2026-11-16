@@ -90,7 +90,7 @@ herdrchat setup     # 交互式：校验密钥 → 选 session → 启动 → 6 
 |---|---|
 | `/ls` | 刷新总览（每个终端的状态、谁在等你、群链接） |
 | `/new`、`/new <目录> [命令]` | 开一个终端：裸 `/new` 出卡片填目录、选 agent（多 session 时还有 session 下拉）；给目录则直达（默认 `claude`，tab 名取目录名）；旧语法 `/new <session> <space>/<tab> [命令]` 仍可用 |
-| `/kill <session> <地址>` | 结束一个终端 |
+| `/kill`、`/kill <session> <地址>` | 结束一个终端：裸 `/kill` 出卡选（显示房间名）；点名直达 |
 | `/clean` | 清理已结束终端的群与陈旧文件（先出预览卡，确认才删） |
 | `/sessions`、`/sessions add/drop <name>` | 本机 hc session 一览 / 调整 bot 的跟随范围（写入设置并重启生效；不从聊天里造 core） |
 | `/auth` | OAuth 设备流授权 bot「以你行事」：替你静音群、打标签、置顶 |

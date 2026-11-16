@@ -318,7 +318,7 @@ func TestMenuCardJSONShape(t *testing.T) {
 
 // 一个 chat 的第一条消息必须被处理：
 // 曾经这里向无缓冲通道发送、抱着 chat 的锁死住，
-// 之后所有消息全部卡死 ( 零日志 ) —— 回归锁。
+// 之后所有消息全部卡死 ( 零日志 ) 回归锁。
 func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
 	c := New("a", "b", "", "t", &state.MemStore{}, t.TempDir())
 	var mu sync.Mutex
@@ -349,11 +349,13 @@ func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
 	}
 }
 
-// /new 的开终端卡：目录输入与 agent 下拉同一张表单 ( 按钮点击不带输入，
-// 表单提交才带 )，Start 一次带齐两者；Esc 在表单外。
+// /new 的开终端卡：目录输入与 agent 下拉同一张表单 ( 按钮点击不带输入，表单提交才带 )，
+// Start 一次带齐两者；Esc 在表单外。
 func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
-	card := NewCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "",
-		[]core.Select{{Name: "agent", Options: []string{"claude", "codex"}}}, map[string]any{"k": "new-terminal"})
+	card := NewCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "", "",
+		[]core.Select{{Name: "agent", Options: []core.SelectOption{
+			{Label: "claude", Value: "claude"}, {Label: "codex", Value: "codex"},
+		}}}, map[string]any{"k": "new-terminal"})
 	body, _ := card[kBody].(map[string]any)
 	elements, _ := body[kElements].([]any)
 	form, _ := elements[1].(map[string]any)
@@ -370,5 +372,23 @@ func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("no %s in card", want)
 		}
+	}
+}
+
+// 无输入诉求的表单卡 ( /kill )：不带输入框必填的空输入框会拦住提交。
+func TestNewCardWithoutInputOmitsIt(t *testing.T) {
+	card := NewCard("End a terminal", "Which one?", "", "", "End",
+		[]core.Select{{Name: "terminal", Options: []core.SelectOption{{Label: "dev / jit (t25)", Value: "default|t25"}}}},
+		map[string]any{"k": "kill-terminal"})
+	raw, _ := json.Marshal(card)
+	s := string(raw)
+	if strings.Contains(s, `"name":"answer"`) {
+		t.Fatal("a card with nothing to type must not carry the input")
+	}
+	if !strings.Contains(s, `"content":"End"`) {
+		t.Fatalf("the submit verb must say End:\n%s", s)
+	}
+	if !strings.Contains(s, `"name":"terminal"`) || !strings.Contains(s, `"initial_option":"default|t25"`) {
+		t.Fatalf("the select is missing:\n%s", s)
 	}
 }

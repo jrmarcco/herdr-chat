@@ -70,8 +70,7 @@ func TestMissingFileIsEmpty(t *testing.T) {
 }
 
 func TestCorruptFileIsKeptAsideAndReported(t *testing.T) {
-	// 损坏的 state.json 绝不静默重置——房间会无声无息地丢。
-	// 它被备份并如实上报。
+	// 损坏的 state.json 绝不静默重置房间会无声无息地丢，它被备份并如实上报。
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
 	if err := os.WriteFile(path, []byte(`{"chats": { broken`), 0o600); err != nil {

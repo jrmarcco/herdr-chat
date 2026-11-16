@@ -9,6 +9,7 @@ package feishu
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"strconv"
 	"strings"
@@ -72,6 +73,7 @@ func chunk(text string, size int) []string {
 			length = 0
 		}
 	}
+
 	for raw := range strings.SplitSeq(text, "\n") {
 		line := raw
 		for {
@@ -98,6 +100,7 @@ func chunk(text string, size int) []string {
 			line = line[size:]
 		}
 	}
+
 	if len(current) > 0 {
 		parts = append(parts, strings.Join(current, "\n"))
 	}
@@ -152,8 +155,7 @@ var tones = map[core.Tone]toneLook{
 // ( RE2 没有 Extended_Pictographic，用符号块近似：杂项符号、表情符号块、变体选择符与零宽连接符 )。
 var leadingEmoji = regexp.MustCompile(`^(?:[\x{2190}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{200D}][\x{FE0F}\x{200D}]*\s*)+`)
 
-// cardHeader 是卡片的头：标题 ( 去掉 core 领头的 emoji——图标已经说了 ) 与
-// 色调模板色。
+// cardHeader 是卡片的头：标题 ( 去掉 core 领头的 emoji 图标已经说了 ) 与色调模板色。
 func cardHeader(title string, tone core.Tone) map[string]any {
 	look, ok := tones[tone]
 	if !ok {
@@ -270,6 +272,7 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 		choices = append(choices, button(fmt.Sprintf("%d. %s", o.N, o.Label), v, buttonType))
 		labels = append(labels, fmt.Sprintf("%d. %s", o.N, o.Label))
 	}
+
 	if len(choices) > 0 {
 		elements = append(elements, optionsBlock(choices, labels)...)
 	}
@@ -291,6 +294,7 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 			},
 		})
 	}
+
 	elements = append(elements, buttonRow([]any{button("Esc (cancel)", withPick(value, pickEsc, ""), "danger_text")}))
 	elements = append(elements, footerElements(footer)...)
 	return map[string]any{
@@ -301,40 +305,49 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 	}
 }
 
-// NewCard 是 /new 的开终端卡：一张表单带齐目录输入与 agent 下拉——
-// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走，就得同表单
-// ( core.Dialog.Select 的由来 )。
-func NewCard(title, markdown, placeholder, footer string, selects []core.Select, value map[string]any) map[string]any {
-	fields := []any{
-		map[string]any{
+// NewCard 是 /new 的开终端卡：
+// 一张表单带齐目录输入与 agent 下拉按钮点击不携带输入内容，只有表单提交带；
+// 要输入+选择一次带走，就得同表单 ( core.Dialog.Select 的由来 )。
+func NewCard(title, markdown, placeholder, footer, submit string, selects []core.Select, value map[string]any) map[string]any {
+	if submit == "" {
+		submit = "Start"
+	}
+	// 输入框只在有话说的时候出现 ( /new 的目录输入；/kill 只要下拉 ) 必填的空输入框会拦住整个表单的提交。
+	var fields []any
+	if placeholder != "" {
+		fields = append(fields, map[string]any{
 			kTag: "input", kName: "answer", "required": true,
 			"placeholder": map[string]any{kTag: kPlain, kContent: placeholder},
-		},
+		})
 	}
 	for _, sel := range selects {
 		if len(sel.Options) == 0 {
 			continue
 		}
+
 		var options []any
 		for _, opt := range sel.Options {
 			options = append(options, map[string]any{
-				kText:     map[string]any{kTag: kPlain, kContent: opt},
-				kOptValue: opt,
+				kText:     map[string]any{kTag: kPlain, kContent: opt.Label},
+				kOptValue: opt.Value,
 			})
 		}
+
 		// schema 2.0 的 select_static 不收 text 标签 ( 实测 200621 )；
 		// initial_option 是选项 value 的字符串。
 		fields = append(fields, map[string]any{
 			kTag: "select_static", kName: sel.Name,
 			"options":        options,
-			"initial_option": sel.Options[0],
+			"initial_option": sel.Options[0].Value,
 		})
 	}
-	fields = append(fields, formSubmit("Start", withPick(value, "1", "start"), "start"))
+
+	fields = append(fields, formSubmit(submit, withPick(value, "1", "start"), "start"))
 	elements := []any{map[string]any{kTag: kMarkdown, kContent: markdown}}
 	elements = append(elements, map[string]any{
 		kTag: kForm, kName: "new", kElements: fields,
 	})
+
 	elements = append(elements, buttonRow([]any{button("Esc (cancel)", withPick(value, pickEsc, ""), "danger_text")}))
 	elements = append(elements, footerElements(footer)...)
 	return map[string]any{
@@ -363,9 +376,7 @@ func formSubmit(text string, value map[string]any, name string) map[string]any {
 // withPick 把 pick 与 label 叠进卡片的值。
 func withPick(value map[string]any, pick, label string) map[string]any {
 	out := make(map[string]any, len(value)+2)
-	for k, v := range value {
-		out[k] = v
-	}
+	maps.Copy(out, value)
 	out["pick"] = pick
 	if label != "" {
 		out["label"] = label
