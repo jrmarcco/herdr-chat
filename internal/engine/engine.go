@@ -85,6 +85,8 @@ type Engine struct {
 
 	// SetOwner 记下配对成功的 owner ( 写进 config.env；装配处注入 )。
 	SetOwner func(ownerID string) error
+	// SetSessions 改写跟随的 HERDR_SESSIONS ( /sessions add|drop；装配处注入 )。
+	SetSessions func([]string) error
 	// Restart 在配对成功后让进程让位给新 owner 的实例
 	// ( 装配处注入：退出，由服务或终端循环拉起 )。
 	Restart func()

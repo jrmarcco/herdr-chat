@@ -60,7 +60,7 @@ func TestNewCardSubmitStartsTheTerminal(t *testing.T) {
 		Value:   map[string]any{"k": newKey, valPick: "1"},
 		Message: directMsg,
 		Answer:  " Projects/foo ",
-		Form:    map[string]string{"agent": "codex"},
+		Form:    map[string]string{fieldAgent: "codex"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestNewDefaultSpaceWhenNoSibling(t *testing.T) {
 	}
 
 	// 注入的默认 space 生效。
-	r.e.DefaultSpace = "work"
+	r.e.DefaultSpace = sessWork
 	r.direct("/new Projects/bar")
 	r.waitFor(t, "第二台", func() bool { return len(r.hc.RunsOf()) == 2 })
 	_, opts = r.lastRun()

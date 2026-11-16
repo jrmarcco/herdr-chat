@@ -304,34 +304,36 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 // NewCard 是 /new 的开终端卡：一张表单带齐目录输入与 agent 下拉——
 // 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走，就得同表单
 // ( core.Dialog.Select 的由来 )。
-func NewCard(title, markdown, placeholder, footer string, agents []string, value map[string]any) map[string]any {
-	if len(agents) == 0 {
-		agents = []string{"claude"}
+func NewCard(title, markdown, placeholder, footer string, selects []core.Select, value map[string]any) map[string]any {
+	fields := []any{
+		map[string]any{
+			kTag: "input", kName: "answer", "required": true,
+			"placeholder": map[string]any{kTag: kPlain, kContent: placeholder},
+		},
 	}
-	var options []any
-	for _, a := range agents {
-		options = append(options, map[string]any{
-			kText:     map[string]any{kTag: kPlain, kContent: a},
-			kOptValue: a,
+	for _, sel := range selects {
+		if len(sel.Options) == 0 {
+			continue
+		}
+		var options []any
+		for _, opt := range sel.Options {
+			options = append(options, map[string]any{
+				kText:     map[string]any{kTag: kPlain, kContent: opt},
+				kOptValue: opt,
+			})
+		}
+		// schema 2.0 的 select_static 不收 text 标签 ( 实测 200621 )；
+		// initial_option 是选项 value 的字符串。
+		fields = append(fields, map[string]any{
+			kTag: "select_static", kName: sel.Name,
+			"options":        options,
+			"initial_option": sel.Options[0],
 		})
 	}
+	fields = append(fields, formSubmit("Start", withPick(value, "1", "start"), "start"))
 	elements := []any{map[string]any{kTag: kMarkdown, kContent: markdown}}
 	elements = append(elements, map[string]any{
-		kTag: kForm, kName: "new",
-		kElements: []any{
-			map[string]any{
-				kTag: "input", kName: "answer", "required": true,
-				"placeholder": map[string]any{kTag: kPlain, kContent: placeholder},
-			},
-			map[string]any{
-				kTag: "select_static", kName: "agent",
-				// schema 2.0 的 select_static 不收 text 标签 ( 实测 200621 )；
-				// initial_option 是选项 value 的字符串。
-				"options":        options,
-				"initial_option": agents[0],
-			},
-			formSubmit("Start", withPick(value, "1", "start"), "start"),
-		},
+		kTag: kForm, kName: "new", kElements: fields,
 	})
 	elements = append(elements, buttonRow([]any{button("Esc (cancel)", withPick(value, pickEsc, ""), "danger_text")}))
 	elements = append(elements, footerElements(footer)...)

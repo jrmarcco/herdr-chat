@@ -353,7 +353,7 @@ func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
 // 表单提交才带 )，Start 一次带齐两者；Esc 在表单外。
 func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
 	card := NewCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "",
-		[]string{"claude", "codex"}, map[string]any{"k": "new-terminal"})
+		[]core.Select{{Name: "agent", Options: []string{"claude", "codex"}}}, map[string]any{"k": "new-terminal"})
 	body, _ := card[kBody].(map[string]any)
 	elements, _ := body[kElements].([]any)
 	form, _ := elements[1].(map[string]any)

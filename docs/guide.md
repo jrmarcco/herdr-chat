@@ -229,11 +229,15 @@ delivered (the terminal has ended) says so plainly.
 
 - Direct chat: `/ls` (the overview again at the bottom of the chat; the old one is
   recalled), `/new` (a card asks: the folder to work in — under your home, relative —
-  and the agent; one form, one submit), `/new <folder> [command]` (start one right
+  the agent — and, when several sessions are followed, the session —; one form, one
+  submit), `/new <folder> [command]` (start one right
   away; default `claude`, the folder's name names the tab, the space follows your
   most recent terminal or `HERDRCHAT_SPACE`), `/new <session> <space>/<tab>
   [command]` (name the place yourself; its folder comes from a sibling in that
-  space), `/kill <session> <address>`, `/clean` (clean up ended
+  space), `/sessions` (the hc sessions on this machine, which the bot follows, and each
+  core's state; `/sessions add|drop <name>` changes what it follows — saved, then the
+  bot starts again to apply; a session with live terminals is not dropped, and no
+  core is created from chat), `/kill <session> <address>`, `/clean` (clean up ended
   terminals' groups and stale screen files; it asks first), `/auth` (see below). Feishu can have a bot menu for `/ls`, help and `/auth` (set in the
   developer console:
   `skills/herdrchat/references/feishu.md`, "The bot menu").

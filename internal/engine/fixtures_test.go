@@ -28,4 +28,8 @@ const (
 	callPostDialog = "PostDialog"
 	keyCwd         = "cwd"
 	valPick        = "pick"
+
+	fieldAgent   = "agent"   // /new 卡的下拉字段
+	fieldSession = "session" // /new 卡的下拉字段
+	sessWork     = "work"    // 第二个测试 session
 )

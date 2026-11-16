@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jrmarcco/herdr-chat/internal/asks"
 	"github.com/jrmarcco/herdr-chat/internal/core"
@@ -110,6 +112,10 @@ func (e *Engine) direct(where core.Where, text string) {
 		if said := e.cleanEnded(args, where); said != "" {
 			reply(said)
 		}
+	case "/sessions":
+		if said := e.sessionsCmd(args); said != "" {
+			reply(said)
+		}
 	case "/kill":
 		if len(args) < 2 || !e.knownSession(args[0]) {
 			reply("give `/kill <session> <address>`")
@@ -136,9 +142,101 @@ func (e *Engine) help() string {
 		"`/new` a card asks the folder and the agent; `/new <folder> [command]` starts one right away (default `claude`); `/new <session> <space>/<tab> [command]` names the place yourself",
 		"`/kill <session> <address>` end a terminal",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
+		"`/sessions` the sessions on this machine; `/sessions add|drop <name>` what the bot follows (it starts again to apply)",
 		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
 	}
 	return strings.Join(lines, "\n")
+}
+
+// sessionsCmd：/sessions —— 本机 hc session 一览与跟随范围。
+// 聊天只管 bot 的视野：add 纳入一个本机已存在的 session，drop 移出；
+// 造 core 属于 CLI/技能包的事，这里不做。
+func (e *Engine) sessionsCmd(args []string) string {
+	if len(args) == 0 {
+		return e.sessionsList()
+	}
+	if len(args) != 2 || (args[0] != "add" && args[0] != "drop") {
+		return "usage: `/sessions` · `/sessions add <name>` · `/sessions drop <name>`"
+	}
+	return e.sessionFollow(args[1], args[0] == "add")
+}
+
+// sessionsList：每台 core 的死活、是否跟随、终端数。
+func (e *Engine) sessionsList() string {
+	here := hccli.SessionsHere(e.Env, e.homeDirOr())
+	if len(here) == 0 {
+		return "no hc session on this machine (`hc server start` makes the default one)"
+	}
+	var lines []string
+	for _, s := range here {
+		state := "core down"
+		if hccli.CoreUp(context.Background(), e.Env, e.homeDirOr(), s, time.Second) {
+			state = "core up"
+		}
+		followed := "not followed — `/sessions add " + s + "`"
+		if slices.Contains(e.Sessions, s) {
+			n := 0
+			if v := e.viewOf(s); v != nil {
+				n = len(v.All())
+			}
+			followed = fmt.Sprintf("followed · %d terminal(s)", n)
+		}
+		lines = append(lines, "- `"+s+"` · "+state+" · "+followed)
+	}
+	return "sessions on this machine:\n" + strings.Join(lines, "\n")
+}
+
+// sessionFollow：纳入 / 移出一个本机 session 的跟随，写入设置后重启生效。
+func (e *Engine) sessionFollow(name string, follow bool) string {
+	if follow && !slices.Contains(hccli.SessionsHere(e.Env, e.homeDirOr()), name) {
+		return fmt.Sprintf("session %q is not on this machine (`ls ~/.local/state/herdr-core` lists them)", name)
+	}
+	var next []string
+	for _, s := range e.Sessions {
+		if !follow && s == name {
+			continue
+		}
+		next = append(next, s)
+	}
+	if follow && !slices.Contains(next, name) {
+		next = append(next, name)
+	}
+	if slices.Equal(next, e.Sessions) {
+		if follow {
+			return "already following `" + name + "`"
+		}
+		return "not following `" + name + "`"
+	}
+	if len(next) == 0 {
+		return "the bot must follow at least one session"
+	}
+	if !follow {
+		// 活着的终端先处理干净：它们的房间还指着这个 session。
+		if v := e.viewOf(name); v != nil {
+			for _, t := range v.All() {
+				if t.Live() {
+					return fmt.Sprintf("`%s` still has a live terminal (%s): /kill it (or wait for it) first", name, t.Address())
+				}
+			}
+		}
+	}
+	if e.SetSessions == nil {
+		return "cannot save it here (the setting writer is not wired)"
+	}
+	if err := e.SetSessions(next); err != nil {
+		return "Not saved: " + err.Error()
+	}
+	e.Sessions = next // 进程内同步：重复 add 幂等，重启后配置本就是同一份
+	if e.Restart != nil {
+		go func() {
+			e.sleep(RestartWait)
+			e.Restart()
+		}()
+	}
+	if follow {
+		return "Following `" + name + "` now — it starts again in a moment; each of its terminals gets a group."
+	}
+	return "Not following `" + name + "` anymore — it starts again in a moment; its groups stay until `/clean`."
 }
 
 // newKey 是 /new 开终端卡的对话框 key ( onAction 据此拦截，不走终端 )。
@@ -200,6 +298,17 @@ func (e *Engine) newTerminal(args []string, where core.Where) string {
 	return msg
 }
 
+// newCardSelects：/new 卡的下拉。agent 恒有；session 只在跟随多个时出现
+// ( 单 session 的下拉是噪音 )，且只能选 bot 自己跟随的——不跟随的 session
+// 开出来的终端没有镜像，等于黑洞。
+func (e *Engine) newCardSelects() []core.Select {
+	selects := []core.Select{{Name: "agent", Options: e.agentOptions()}}
+	if len(e.Sessions) > 1 {
+		selects = append(selects, core.Select{Name: "session", Options: append([]string(nil), e.Sessions...)})
+	}
+	return selects
+}
+
 // onNewCard：/new 卡的提交。目录输入与 agent 下拉同一张表单，一次带齐；
 // 校验失败只回 toast ( 卡留着、输入还在，改一下再提交 )。
 func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionResult, error) {
@@ -214,7 +323,14 @@ func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionRes
 	if agent := click.Form["agent"]; slices.Contains(e.agentOptions(), agent) {
 		command = agent
 	}
-	msg, ok := e.startTerminal(startRequest{folder: folder, command: command})
+	req := startRequest{folder: folder, command: command}
+	if session := click.Form["session"]; session != "" {
+		if !e.knownSession(session) {
+			return core.ActionResult{Toast: "unknown session " + session + "; known: " + strings.Join(e.Sessions, ", ")}, nil
+		}
+		req.session = session
+	}
+	msg, ok := e.startTerminal(req)
 	if !ok {
 		return core.ActionResult{Toast: msg}, nil
 	}
@@ -235,7 +351,7 @@ func (e *Engine) newTerminalCard(where core.Where) string {
 			Key:  newKey,
 			Free: &core.MenuOption{N: 1, Label: "Working folder, e.g. Projects/foo"},
 		},
-		Select: &core.Select{Label: "Agent", Options: e.agentOptions()},
+		Selects: e.newCardSelects(),
 	}
 	if _, err := e.Chat.PostDialog(e.ctx, where.Room, dialog, map[string]any{"k": newKey}); err != nil {
 		xlog.For("engine").Warn("new 卡发送失败", "error", err)

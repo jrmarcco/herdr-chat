@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -76,6 +77,9 @@ func (a *App) cmdRun([]string) int {
 	e.SetAsks(shared)
 	e.SetOwner = func(ownerID string) error {
 		return config.SetConfigValue(a.configFile(pl), chat.OwnerKey(), ownerID)
+	}
+	e.SetSessions = func(list []string) error {
+		return config.SetConfigValue(a.configFile(pl), "HERDR_SESSIONS", strings.Join(list, ","))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

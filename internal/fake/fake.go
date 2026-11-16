@@ -202,7 +202,7 @@ func (f *FakeChat) EditCard(ctx context.Context, msg core.Message, look core.Loo
 }
 
 func (f *FakeChat) PostDialog(ctx context.Context, room core.Room, d core.Dialog, v core.DialogValue) (core.Message, error) {
-	f.record("PostDialog", string(room), d.Title, v)
+	f.record("PostDialog", string(room), d.Title, v, d)
 	return f.fresh(), nil
 }
 

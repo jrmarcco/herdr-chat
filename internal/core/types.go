@@ -76,14 +76,15 @@ type Dialog struct {
 	Markdown  string
 	DoneTitle string
 	Footer    string
-	// Select 可选：与 Free 同一张表单里的下拉 ( /new 选 agent 这类 )——
+	// Selects 可选：与 Free 同一张表单里的下拉 ( /new 选 agent、session 这类 )——
 	// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走就得同表单。
-	Select *Select
+	Selects []Select
 }
 
-// Select 是卡片表单里的一个下拉：标签与候选，默认选第一个。
+// Select 是卡片表单里的一个下拉：表单字段名与候选，默认选第一个。
+// ( schema 2.0 的 select_static 不收标签文本，选项自己说明自己。 )
 type Select struct {
-	Label   string
+	Name    string
 	Options []string
 }
 
