@@ -21,6 +21,11 @@ import (
 func (e *Engine) deliver(session string, record hccli.Terminal, send func(core.Room) (core.Message, error)) (core.Message, error) {
 	for attempt := 1; ; attempt++ {
 		room, err := e.ensureRoom(session, record)
+		if err == nil && room == "" {
+			// 没有错也没有房间：这个终端不该有房间 ( 未在 herdr-app 展示、
+			// 或 tab 还被旧终端占着 )——重试改变不了它，立刻按无事收场。
+			return "", nil
+		}
 		if err == nil && room != "" {
 			msg, sendErr := send(room)
 			if sendErr == nil {

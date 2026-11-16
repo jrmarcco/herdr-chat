@@ -258,7 +258,9 @@ browser, or tells you what to click without it; or follow the steps here yoursel
    reading the messages sent to it, making, renaming and deleting groups, reactions,
    images both ways, and group tags.
 3. `herdrchat init` prints where its `config.env` is. Fill in the app's App ID and App
-   Secret (the app's 凭证与基础信息 page). `HERDR_SESSIONS` can stay empty for hc's
+   Secret (the app's 凭证与基础信息 page). `herdrchat setup` also asks for the optional
+   Encrypt Key and Verification Token (事件与回调 -> 加密策略); Enter skips them.
+   `HERDR_SESSIONS` can stay empty for hc's
    default session (`ls ~/.local/state/herdr-core` lists yours).
 4. `herdrchat start`. The bot must be running for the next step: the console checks for
    a live connection.

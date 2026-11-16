@@ -49,8 +49,11 @@ func (a *App) cmdPair([]string) int {
 	a.println()
 	a.println("    " + code)
 	a.println()
-	a.printf("It works for %d minutes; a wrong code can be tried %d times.\n",
-		int(core.PairWindow.Minutes()), core.PairTries)
+	a.printf(
+		"It works for %d minutes; a wrong code can be tried %d times.\n",
+		int(core.PairWindow.Minutes()),
+		core.PairTries,
+	)
 	a.printf("Waiting for the owner…\n")
 
 	deadline := a.now().Add(core.PairWindow)

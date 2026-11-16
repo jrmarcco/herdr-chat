@@ -90,11 +90,18 @@ func TestServiceNamesItsFilePerProfileAndTellsWhenItsBinaryIsGone(t *testing.T) 
 	if svc.Installed() {
 		t.Fatal("installed before it is written")
 	}
+	// Write 要顺带把日志目录建好：全新 profile 直接 install 时它还不存在，
+	// systemd 打不开 StandardOutput 的文件就是 209 崩溃循环。
+	spec.Out = filepath.Join(home, "state", "logs", "service.out.log")
+	svc.Spec = spec
 	if err := svc.Write(); err != nil {
 		t.Fatal(err)
 	}
 	if !svc.Installed() {
 		t.Fatal("not installed after it is written")
+	}
+	if info, err := os.Stat(filepath.Dir(spec.Out)); err != nil || !info.IsDir() {
+		t.Fatalf("the logs dir the service writes into: %v", err)
 	}
 	if raw, _ := os.ReadFile(svc.File); string(raw) != svc.Content() {
 		t.Fatal("the file is not the content")

@@ -278,6 +278,13 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 		case "created", "restarted":
 			view.terminals[name] = Terminal(data)
 		case "removed":
+			// 摘掉之前留好这份记录并按已结束盖印：
+			// 回调 ( postEnd 的遗言 ) 还要用它，且它不再是 live，
+			// 谁也不会再为它建房间。
+			if record != nil {
+				record["state"] = "finished"
+				record["foreground"] = nil
+			}
 			delete(view.terminals, name)
 		case kindFinished:
 			maps.Copy(record, data)
@@ -315,6 +322,9 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 			}
 		}
 		current := view.terminals[name]
+		if typ == "removed" {
+			current = record // 摘掉之前的它：回调要拿着完整的遗言记录
+		}
 		view.mu.Unlock()
 		if typ == "turn" {
 			state, _ := data["state"].(string)

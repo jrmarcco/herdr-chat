@@ -185,12 +185,19 @@ func (s *Service) Installed() bool {
 }
 
 // Write 写下服务文件 ( 每次重写：路径或变量变了就跟着变 )。
+// 日志目录也一并建好：它还不在的话 systemd 打不开 StandardOutput 的文件，
+// 服务 209 起不来 ( 全新 profile 直接 install 正是这种情形 )。
 func (s *Service) Write() error {
 	//nolint:gosec // G301: LaunchAgents / systemd user 目录是系统约定的 0755。
 	if err := os.MkdirAll(filepath.Dir(s.File), 0o755); err != nil {
 		return err
 	}
-	//nolint:gosec // G306: 服务文件由 launchd/systemd 读取，0644 是约定 mode ( 不含秘密 )。
+	if s.Spec.Out != "" {
+		if err := os.MkdirAll(filepath.Dir(s.Spec.Out), 0o700); err != nil {
+			return err
+		}
+	}
+	//nolint:gosec // G306: 服务文件由 launchd/systemd 读取，0644 是约定 mode。
 	return os.WriteFile(s.File, []byte(s.Content()), 0o644)
 }
 

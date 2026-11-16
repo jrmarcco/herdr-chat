@@ -79,6 +79,12 @@ func (a *App) cmdSetup([]string) int {
 		}
 	}
 
+	// 可选的加密策略两键：回车跳过。
+	if err := a.askEventKeys(file, env); err != nil {
+		a.errf("herdrchat: %v\n", err)
+		return 1
+	}
+
 	// 4. sessions：列出本机的，逗号分隔；
 	// 回车全 default。
 	here := a.sessionsHere()
@@ -129,6 +135,38 @@ func (a *App) cmdSetup([]string) int {
 	}
 	a.println("then `herdrchat start` runs it in an hc terminal.")
 	return 0
+}
+
+// askEventKeys 问可选的加密策略两键 ( 控制台 事件与回调 -> 加密策略 页 )：
+// 回车跳过，已有值的回车保留。只在给了值时写。
+// 空着不写，starter 里那两行空键原样留着。
+func (a *App) askEventKeys(file string, env map[string]string) error {
+	a.println("Optional: the app's Encrypt Key and Verification Token (事件与回调 -> 加密策略 page).")
+	a.println("The long connection works without them; fill them only if that page shows them.")
+
+	ask := func(name, saved string) string {
+		hint := "skip"
+		if saved != "" {
+			hint = "kept"
+		}
+		v := a.secret(name + " [" + hint + "]: ")
+		if v == "" {
+			return saved
+		}
+		return v
+	}
+	for k, v := range map[string]string{
+		keyEncryptKey:  ask("Encrypt Key", env[keyEncryptKey]),
+		keyVerifyToken: ask("Verification Token", env[keyVerifyToken]),
+	} {
+		if v == "" {
+			continue
+		}
+		if err := config.SetConfigValue(file, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // secret 问一个不回显的回答 ( stty -echo；不是终端就退而求其次照读 )。

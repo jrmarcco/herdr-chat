@@ -431,8 +431,20 @@ const (
 	tagBizChat    = "chat"
 )
 
+// ErrDuplicateTag：同名租户标签已在。飞书这种情形报 402 且响应里没有那个
+// 标签的 id，平台也没有按名查询的接口 ( 实测 2026-11；tag.list 只按 id 查 )——
+// id 无从得知，调用方只能放弃这次装饰。
+type ErrDuplicateTag struct {
+	Name string
+}
+
+func (e *ErrDuplicateTag) Error() string {
+	return fmt.Sprintf("feishu tag.create 402: duplicate name in tenant (%s)", e.Name)
+}
+
 // CreateTag 建一个租户标签，返回它的 id；
-// 同名标签已在时飞书报重复并给出那个 id——拿来用即可 ( 重装或换机后标签不会成双 )。
+// 同名标签已在时飞书报重复并给出那个 id——拿来用即可 ( 重装或换机后标签不会成双 )；
+// 402 的形态拿不到 id，作为 ErrDuplicateTag 交回。
 func (s *sdkClient) CreateTag(ctx context.Context, name string) (string, error) {
 	tag := larkimv2.NewCreateTagBuilder().TagType(tagTypeTenant).Name(name).Build()
 	req := larkimv2.NewCreateTagReqBuilder().
@@ -449,6 +461,9 @@ func (s *sdkClient) CreateTag(ctx context.Context, name string) (string, error) 
 		if why := resp.Data.CreateTagFailReason; why != nil && why.DuplicateId != nil && *why.DuplicateId != "" {
 			return *why.DuplicateId, nil
 		}
+	}
+	if resp.Code == 402 && strings.Contains(strings.ToLower(resp.Msg), "duplicate") {
+		return "", &ErrDuplicateTag{Name: name}
 	}
 	return "", fmt.Errorf("feishu tag.create %d: %s", resp.Code, resp.Msg)
 }

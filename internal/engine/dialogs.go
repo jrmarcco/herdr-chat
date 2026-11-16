@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -65,6 +66,9 @@ func (e *Engine) dialogAt(message core.Message) (core.Dialog, bool) {
 }
 
 // dialogName 一个对话框的名字——有菜单用菜单 key；没有用状态词。
+// 状态词也可能全空 ( hc 没说 kind/msg 的提问 )：兜底一个固定的词——
+// 绝不能是空串，那会与 postedDialog 的零值 ( 从未发过 ) 撞车，
+// 第一张卡就被"已发过"拦下。
 // postedDialog 靠它一题一卡；
 // 发卡失败要忘记，让下一个事件 ( 或暂存的消息 ) 再发。
 func dialogName(dialog core.Dialog, status hccli.Terminal) string {
@@ -79,6 +83,9 @@ func dialogName(dialog core.Dialog, status hccli.Terminal) string {
 				words = append(words, v)
 			}
 		}
+	}
+	if len(words) == 0 {
+		return "dialog"
 	}
 	return strings.Join(words, "|")
 }
@@ -98,7 +105,7 @@ func (e *Engine) forgetDialog(k string, name string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.postedDialog[k] == name {
-		delete(e.postedDialog, name)
+		delete(e.postedDialog, k)
 	}
 }
 
@@ -306,6 +313,10 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 		for i := 0; i < DrawTries; i++ {
 			d, err := dialoger.Dialog(e.ctx, session, address)
 			if err != nil {
+				if errors.Is(err, readers.ErrNoHook) {
+					// 这台机器没装 hook：问一百次也不会有，直接读屏。
+					break
+				}
 				xlog.For("engine").Warn("读取 agent 对话框失败", "session", session, "address", address, "error", err)
 			}
 			if d != nil {
@@ -327,17 +338,14 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 		footer := "" // footer ( 屏幕来源标注 ) 随 meter 一起来
 		screenText, _ := e.HC.ScreenTail(e.ctx, session, address, ScreenLines)
 		current := dialogOf(record.State(), screenText, footer)
-		for i := 0; i < DrawTries; i++ {
-			var next core.Dialog
-			if i > 0 {
-				e.sleep(DrawWait)
-				text, _ := e.HC.ScreenTail(e.ctx, session, address, ScreenLines)
-				next = dialogOf(record.State(), text, footer)
-			} else {
-				next = current
-			}
-			steady := current.Menu != nil && current.Menu.Framed &&
-				next.Menu != nil && next.Menu.Key == current.Menu.Key
+		// 两次读到同一个 ( 相隔 DRAW_WAIT )，或两次都没有菜单，才算画完；
+		// 最多再读 DRAW_TRIES-1 次。
+		for i := 1; i < DrawTries; i++ {
+			e.sleep(DrawWait)
+			text, _ := e.HC.ScreenTail(e.ctx, session, address, ScreenLines)
+			next := dialogOf(record.State(), text, footer)
+			steady := (current.Menu == nil && next.Menu == nil) ||
+				(current.Menu != nil && current.Menu.Framed && next.Menu != nil && next.Menu.Key == current.Menu.Key)
 			current = next
 			if steady {
 				break

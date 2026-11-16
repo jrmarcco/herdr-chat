@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -89,6 +90,10 @@ type Chat struct {
 
 	seen   map[string]bool
 	queues map[string]*serialQueue
+
+	// tagDupAt 记一个 scope 的租户标签重名 ( 402 ) 何时试过：
+	// 冷却内不再撞；控制台删掉孤儿标签后，冷却一过再建即成。
+	tagDupAt map[string]time.Time
 
 	youChecked time.Time
 	youAllowed bool
@@ -609,6 +614,9 @@ func (c *Chat) PlaceRoom(ctx context.Context, k string, place core.Place) error 
 	if err != nil {
 		return err
 	}
+	if tagID == "" {
+		return nil // 名字被占而拿不到 id：不绑标签 ( tagOf 说过一声了 )
+	}
 	if room.Tag == tagID {
 		return nil
 	}
@@ -634,7 +642,13 @@ func mergeRoom(old, deco state.Room) state.Room {
 	return old
 }
 
+// tagDupCooldown：标签重名后隔多久再试 ( 控制台删掉孤儿标签即自愈 )。
+const tagDupCooldown = time.Hour
+
 // tagOf 建/取一个 scope 的租户标签 ( id 存 state.tags )。
+// 同名标签占了名字而拿不到 id ( ErrDuplicateTag ) 时装饰退位：
+// 返回空 id、不报错——不绑标签，也绝不拦住房间的其他事；
+// 冷却一过再试 ( tagDupAt )。
 func (c *Chat) tagOf(ctx context.Context, scope string) (string, error) {
 	st, _ := c.Store.Read()
 	if st.Tags == nil {
@@ -643,10 +657,32 @@ func (c *Chat) tagOf(ctx context.Context, scope string) (string, error) {
 	if id, ok := st.Tags[scope]; ok {
 		return id, nil
 	}
+	c.mu.Lock()
+	if c.tagDupAt == nil {
+		c.tagDupAt = map[string]time.Time{}
+	}
+	if at, tried := c.tagDupAt[scope]; tried && time.Since(at) < tagDupCooldown {
+		c.mu.Unlock()
+		return "", nil
+	}
+	c.mu.Unlock()
+
 	tagID, err := c.client.CreateTag(ctx, TagName(scope))
 	if err != nil {
+		var dup *ErrDuplicateTag
+		if errors.As(err, &dup) {
+			c.mu.Lock()
+			c.tagDupAt[scope] = time.Now()
+			c.mu.Unlock()
+			xlog.For("feishu").Warn("租户标签重名，装饰退位 ( 删掉控制台里的同名标签即自愈 )",
+				"scope", scope, "tag", dup.Name, "retry", tagDupCooldown.String())
+			return "", nil
+		}
 		return "", err
 	}
+	c.mu.Lock()
+	delete(c.tagDupAt, scope)
+	c.mu.Unlock()
 	st, _ = c.Store.Read()
 	if st.Tags == nil {
 		st.Tags = map[string]string{}
@@ -668,6 +704,9 @@ func (c *Chat) EndRoom(ctx context.Context, k string) error {
 	tagID, err := c.tagOf(ctx, "ended")
 	if err != nil {
 		return err
+	}
+	if tagID == "" {
+		return nil // 同上：装饰退位，房间照常结束
 	}
 	if err := c.client.BindTag(ctx, tagID, room.Chat); err != nil {
 		return err

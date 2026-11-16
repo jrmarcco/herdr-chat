@@ -291,6 +291,8 @@ type FakeHC struct {
 
 	sessions map[string]hccli.EventHandlers
 	views    map[string]*hccli.View
+
+	screenReads int
 }
 
 // SentText 是 fake 接下的一次 `hc send`。
@@ -482,11 +484,19 @@ func (f *FakeHC) GetTerminal(ctx context.Context, session, address string) (hccl
 func (f *FakeHC) ScreenTail(ctx context.Context, session, address string, lines int) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.screenReads++
 	screen, ok := f.Screens[address]
 	if !ok {
 		return "", nil
 	}
 	return hccli.TidyScreen(screen, lines), nil
+}
+
+// ScreenReads 说屏幕被读了多少次 ( 断言"不再读满 DrawTries 次"用 )。
+func (f *FakeHC) ScreenReads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.screenReads
 }
 
 func (f *FakeHC) Send(ctx context.Context, session, address, text string, force bool) error {
@@ -541,9 +551,12 @@ type FakeReader struct {
 	afterFn      func(ctx context.Context, session, address string, cur state.Cursor) (*core.Reading, error)
 	restFn       func(ctx context.Context, session, address string, cur state.Cursor) ([]core.Item, error)
 	DialogNow    *core.AgentDialog
+	DialogErr    error // Dialog 返回的错误 ( ErrNoHook 剧本 )
 	Answered     []core.Reply
 	MeterInfo    core.MeterInfo
 	CleanedTitle string
+
+	dialogCalls int
 }
 
 // SetAfterFn 换增量剧本 ( 锁内写，与引擎的并发读同步 )。
@@ -590,7 +603,18 @@ func (r *FakeReader) Rest(ctx context.Context, session, address string, cur stat
 func (r *FakeReader) Dialog(ctx context.Context, session, address string) (*core.AgentDialog, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.dialogCalls++
+	if r.DialogErr != nil {
+		return nil, r.DialogErr
+	}
 	return r.DialogNow, nil
+}
+
+// DialogCalls 说 Dialog 被问了几次 ( 断言"不重试"用 )。
+func (r *FakeReader) DialogCalls() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.dialogCalls
 }
 
 // SetDialogNow 换它现在等着的提问 ( 锁内写，与引擎并发读同步 )。

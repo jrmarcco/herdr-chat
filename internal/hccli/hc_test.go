@@ -197,6 +197,56 @@ func TestEventsFollowSnapshotTurnAndDedupe(t *testing.T) {
 	}
 }
 
+// removed 事件的回调带着摘掉之前的记录 ( 盖印 finished )：
+// postEnd 说遗言还要用它——nil 记录连地址都没有。
+func TestARemovedEventCarriesItsRecord(t *testing.T) {
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "hc")
+	script := "#!/bin/sh\ncat <<'JSONL'\n" +
+		`{"seq":1,"terminals":[{"address":"t1","state":"live","status":{"state":"working","app":"claude-code"},"labels":{"where":"api / claude"}}]}` + "\n" +
+		`{"method":"event","params":{"seq":2,"type":"removed","terminal":"t1","data":{"reason":"killed"}}}` + "\n" +
+		"JSONL\nsleep 30\n"
+	//nolint:gosec // G306: 测试 stub 脚本需要可执行位。
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var removed ChangeEvent
+	have := false
+	view := NewView()
+	c := &CLI{Bin: stub, Env: nil}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.FollowEvents(ctx, "s", EventHandlers{
+		OnChange: func(e ChangeEvent) {
+			mu.Lock()
+			defer mu.Unlock()
+			if e.Type == "removed" {
+				removed, have = e, true
+			}
+		},
+	}, view)
+
+	waitFor(t, 5*time.Second, "the removed event", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return have
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if removed.Record == nil || removed.Record.Address() != "t1" {
+		t.Fatalf("record = %v, want the one it had before the removal", removed.Record)
+	}
+	if removed.Record.Live() {
+		t.Fatal("a removed terminal must not stay live")
+	}
+	if _, ok := view.Get("t1"); ok {
+		t.Fatal("the view kept a removed terminal")
+	}
+}
+
 func TestEventsRestartAfterEnding(t *testing.T) {
 	// 事件流立刻结束；
 	// 3 秒后重启，第二轮的快照到达 ( "missed" 也会重放一份 )。

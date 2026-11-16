@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/jrmarcco/herdr-chat/internal/asks"
-
 	"github.com/jrmarcco/herdr-chat/internal/core"
+	"github.com/jrmarcco/herdr-chat/internal/readers"
 )
 
 // 对话框三通路的行为测试：
@@ -450,5 +450,83 @@ func TestTurnDoneClosesTheDialogCard(t *testing.T) {
 	st, _ := r.store.Read()
 	if _, still := st.OpenCards["default|t1"]; still {
 		t.Fatalf("openCards 还留着: %+v", st.OpenCards)
+	}
+}
+
+// 没装 hook 的机器：ErrNoHook 问一次就走，
+// 不把 DRAW_TRIES 花在必无答案的探测上 ( sweep 每分钟都会重来 )。
+func TestPostBlockedAsksTheAgentOnceWhenNoHook(t *testing.T) {
+	r := harness(t)
+	r.reader.DialogErr = readers.ErrNoHook
+	r.hc.SetScreen(addrT1, strings.Join([]string{
+		" We're changing auto mode.",
+		"",
+		" Enter to continue · Esc to cancel",
+	}, "\n"))
+	// status 照生产的样子带上 kind/msg ( claude 总是说 "dialog open" )。
+	r.hc.Change(sessDefault, keyStatus, addrT1, map[string]any{
+		keyStatus: map[string]any{keyState: stateBlocked, keyApp: appFake, "kind": "dialog", "msg": "dialog open"},
+	})
+
+	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
+		t.Fatalf("postBlocked: %v", err)
+	}
+	if got := r.reader.DialogCalls(); got != 1 {
+		t.Fatalf("Dialog asked %d times, want 1", got)
+	}
+	if r.countCalls("Post") != 1 {
+		t.Fatalf("posts = %d, want the no-menu notice", r.countCalls("Post"))
+	}
+}
+
+// 无菜单的屏两次读到一致即采信，不再读满 DRAW_TRIES 次
+// ( blocked 期间 sweep 每分钟重来，读满是纯空转 )。
+func TestPostBlockedSettlesOnAStableNoMenuScreen(t *testing.T) {
+	r := harness(t)
+	r.reader.DialogErr = readers.ErrNoHook
+	r.hc.SetScreen(addrT1, " Enter to continue · Esc to cancel")
+	r.setBlocked()
+
+	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
+		t.Fatalf("postBlocked: %v", err)
+	}
+	if got := r.hc.ScreenReads(); got != 2 {
+		t.Fatalf("screen read %d times, want 2 (a look and its confirm)", got)
+	}
+}
+
+// forgetDialog 真的忘记：发卡失败后，同名的对话框还能再发。
+func TestForgetDialogForgetsTheClaim(t *testing.T) {
+	r := harness(t)
+	k := r.e.keyOf(sessDefault, addrT1)
+	d := core.Dialog{Menu: &core.Menu{Key: "abc"}}
+	if !r.e.claimDialog(k, d, nil) {
+		t.Fatal("the first claim must win")
+	}
+	if r.e.claimDialog(k, d, nil) {
+		t.Fatal("the second claim must lose")
+	}
+	r.e.forgetDialog(k, dialogName(d, nil))
+	if !r.e.claimDialog(k, d, nil) {
+		t.Fatal("after forgetting, the claim must win again")
+	}
+}
+
+// status 没说 kind/msg 的无菜单对话框：名字有兜底，
+// 不再与 postedDialog 的零值 ( 从未发过 ) 撞车——第一张卡发得出去。
+func TestPostBlockedNamesANamelessDialog(t *testing.T) {
+	r := harness(t)
+	r.reader.DialogErr = readers.ErrNoHook
+	r.hc.SetScreen(addrT1, " Enter to continue · Esc to cancel")
+	r.setBlocked() // 无 kind/msg：曾经连名字都是空的
+
+	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
+		t.Fatalf("postBlocked: %v", err)
+	}
+	if r.countCalls("Post") != 1 {
+		t.Fatalf("posts = %d, want the notice even without kind/msg", r.countCalls("Post"))
+	}
+	if got := r.e.postedDialog[r.e.keyOf(sessDefault, addrT1)]; got != "dialog" {
+		t.Fatalf("claimed name = %q, want the fallback", got)
 	}
 }

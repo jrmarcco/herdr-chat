@@ -54,10 +54,12 @@ const (
 )
 
 const (
-	chatFeishu   = "feishu"
-	keyAppID     = "FEISHU_APP_ID"
-	keyAppSecret = "FEISHU_APP_SECRET" //nolint:gosec // G101: 键的名字不是秘密，值从不进代码。
-	levelError   = "ERROR"
+	chatFeishu     = "feishu"
+	keyAppID       = "FEISHU_APP_ID"
+	keyAppSecret   = "FEISHU_APP_SECRET"         //nolint:gosec // G101: 键的名字不是敏感信息，值从不进代码。
+	keyEncryptKey  = "FEISHU_ENCRYPT_KEY"        //nolint:gosec // G101: 键的名字不是敏感信息，值从不进代码。
+	keyVerifyToken = "FEISHU_VERIFICATION_TOKEN" //nolint:gosec // G101: 键的名字不是敏感信息，值从不进代码。
+	levelError     = "ERROR"
 )
 
 // App 是一次 CLI 运行的全部环境。

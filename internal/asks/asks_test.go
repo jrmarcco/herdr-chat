@@ -24,8 +24,8 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/hooks"
 )
 
-// TestAskShSpeaksTheProtocol 让内嵌的 ask.sh 真跑一个来回 ( codex、无 hc
-// 终端：整条路不需要 hc )：请求文件解析进 Ask，答案文件被原样打印，收场不留文件。
+// TestAskShSpeaksTheProtocol 让内嵌的 ask.sh 真跑一个来回 ( codex、无 hc 终端：整条路不需要 hc )：
+// 请求文件解析进 Ask，答案文件被原样打印，收场不留文件。
 // 脚本与 Go 各写一遍协议 ( 字段名、id 形状、目录、标签 )——形状漂移在这里现形。
 func TestAskShSpeaksTheProtocol(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -46,7 +46,11 @@ func TestAskShSpeaksTheProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("sh", filepath.Join(dir, "ask.sh"), "codex", "10") //nolint:gosec // G204: 要测的就是这个脚本
+	// ctx 是最后兜底：脚本挂住也不会拖死测试；精确的失败路径仍由下面的 Kill 收。
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	//nolint:gosec // G204: 要测的就是这个脚本。
+	cmd := exec.CommandContext(ctx, "sh", filepath.Join(dir, "ask.sh"), "codex", "10")
 	cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
 	cmd.Stdin = strings.NewReader(`{"tool_name":"Bash","input":{"command":"make test"}}`)
 	var stdout bytes.Buffer
@@ -80,6 +84,7 @@ func TestAskShSpeaksTheProtocol(t *testing.T) {
 	}
 
 	// 脚本写出的形状得解析进 Ask —— "at" 是不带引号的数字这类漂移在这里现形。
+	//nolint:gosec // G304: 测试目录内的文件。
 	raw, err := os.ReadFile(filepath.Join(reqDir, id+".json"))
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +144,8 @@ func TestPartialsForgotten(t *testing.T) {
 	hc.HomeDirSet = home
 	a := New(hc, home)
 
-	pid := strconv.Itoa(os.Getpid()) // kill -0 认测试自己的进程：自然活着
+	// kill -0 认测试自己的进程：自然活着。
+	pid := strconv.Itoa(os.Getpid())
 	base := time.Now().Add(-time.Hour).Unix()
 	askID := func(i int) string { return strconv.FormatInt(base+int64(i), 10) + "-" + pid }
 
@@ -185,7 +191,9 @@ func TestClipCutsOnRuneBoundary(t *testing.T) {
 	if !utf8.ValidString(got) {
 		t.Fatalf("切出了无效 UTF-8: %q", got)
 	}
-	if n := strings.Count(got, "中"); n != 33 { // 100 字节退到 99：33 个完整的字
+
+	// 100 字节退到 99：33 个完整的字。
+	if n := strings.Count(got, "中"); n != 33 {
 		t.Errorf("完整的字 = %d，该是 33", n)
 	}
 	if !strings.HasSuffix(got, "… (the rest is in the terminal)") {

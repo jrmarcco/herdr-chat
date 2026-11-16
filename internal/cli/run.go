@@ -51,9 +51,13 @@ func (a *App) cmdRun([]string) int {
 	}
 
 	chat := feishu.New(cfg.AppID, cfg.AppSecret, cfg.OwnerOpenID, pl.Profile, store, pl.StateDir)
-	chat.Muted, chat.Silent = cfg.Muted, cfg.Silent
-	chat.BotTags, chat.UserTags = cfg.BotTags, cfg.UserTags
-	chat.EncryptKey, chat.VerificationToken = cfg.EncryptKey, cfg.VerificationToken
+	chat.Muted = cfg.Muted
+	chat.Silent = cfg.Silent
+	chat.BotTags = cfg.BotTags
+	chat.UserTags = cfg.UserTags
+	chat.EncryptKey = cfg.EncryptKey
+	chat.VerificationToken = cfg.VerificationToken
+
 	if err := chats.CheckChat(chat); err != nil {
 		log.Error("chat 不合法", "error", err)
 		return 1
