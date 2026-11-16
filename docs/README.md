@@ -32,7 +32,9 @@ What it does:
   (tools it calls, your prompts, images) — an edit is not a message, so the phone stays
   quiet; the turn's last answer arrives as its own message;
 - **Dialogs, three ways**: what the agent itself reports (its hook, its API) first — its own
-  words, its own options as buttons; the screen's numbered menu next; the whole screen with
+  words, its own options as buttons; the screen's numbered menu next (a screen with no numbers
+  but its own "Enter to continue · Esc to cancel" offer gets synthesized buttons that press
+  exactly the keys it names); the whole screen with
   `/answer`, `/enter` and `/esc` as the fallback. The screen is re-read before any key is pressed, so
   an old card can never answer a newer dialog;
 - **Input both ways**: typing in a group goes into the terminal; images are placed on the

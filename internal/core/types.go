@@ -62,6 +62,11 @@ type Menu struct {
 	Beside  bool
 	Cursor  int
 	Own     any
+
+	// Keys 是合成菜单的按键表 ( 选项编号 → 要按的键 )：
+	// 屏幕没有编号、但自己声明了 Enter 前进时，按钮忠实转述那条路，
+	// 点击按它声明的键，绝不按数字。nil = 编号菜单，按数字走。
+	Keys map[int][]string
 }
 
 // Dialog 是终端在等什么：有菜单就带菜单、周围的话，以及卡片关闭时说的话。

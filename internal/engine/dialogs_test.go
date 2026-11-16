@@ -453,19 +453,17 @@ func TestTurnDoneClosesTheDialogCard(t *testing.T) {
 	}
 }
 
+const kindDialog = "dialog"
+
 // 没装 hook 的机器：ErrNoHook 问一次就走，
 // 不把 DRAW_TRIES 花在必无答案的探测上 ( sweep 每分钟都会重来 )。
 func TestPostBlockedAsksTheAgentOnceWhenNoHook(t *testing.T) {
 	r := harness(t)
 	r.reader.DialogErr = readers.ErrNoHook
-	r.hc.SetScreen(addrT1, strings.Join([]string{
-		" We're changing auto mode.",
-		"",
-		" Enter to continue · Esc to cancel",
-	}, "\n"))
+	r.hc.SetScreen(addrT1, " It waits for a yes or a no.")
 	// status 照生产的样子带上 kind/msg ( claude 总是说 "dialog open" )。
 	r.hc.Change(sessDefault, keyStatus, addrT1, map[string]any{
-		keyStatus: map[string]any{keyState: stateBlocked, keyApp: appFake, "kind": "dialog", "msg": "dialog open"},
+		keyStatus: map[string]any{keyState: stateBlocked, keyApp: appFake, "kind": kindDialog, "msg": "dialog open"},
 	})
 
 	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
@@ -484,7 +482,7 @@ func TestPostBlockedAsksTheAgentOnceWhenNoHook(t *testing.T) {
 func TestPostBlockedSettlesOnAStableNoMenuScreen(t *testing.T) {
 	r := harness(t)
 	r.reader.DialogErr = readers.ErrNoHook
-	r.hc.SetScreen(addrT1, " Enter to continue · Esc to cancel")
+	r.hc.SetScreen(addrT1, " It waits for a yes or a no.")
 	r.setBlocked()
 
 	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
@@ -517,7 +515,7 @@ func TestForgetDialogForgetsTheClaim(t *testing.T) {
 func TestPostBlockedNamesANamelessDialog(t *testing.T) {
 	r := harness(t)
 	r.reader.DialogErr = readers.ErrNoHook
-	r.hc.SetScreen(addrT1, " Enter to continue · Esc to cancel")
+	r.hc.SetScreen(addrT1, " It waits for a yes or a no.")
 	r.setBlocked() // 无 kind/msg：曾经连名字都是空的
 
 	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
@@ -526,7 +524,75 @@ func TestPostBlockedNamesANamelessDialog(t *testing.T) {
 	if r.countCalls("Post") != 1 {
 		t.Fatalf("posts = %d, want the notice even without kind/msg", r.countCalls("Post"))
 	}
-	if got := r.e.postedDialog[r.e.keyOf(sessDefault, addrT1)]; got != "dialog" {
+	if got := r.e.postedDialog[r.e.keyOf(sessDefault, addrT1)]; got != kindDialog {
 		t.Fatalf("claimed name = %q, want the fallback", got)
+	}
+}
+
+// 「Enter to continue · Esc to cancel」形状的告知：合成按钮卡——
+// 走 PostDialog ( 不是文字 )、进 openCards；点击按 enter，绝不按数字。
+func TestConfirmNoticeBecomesAButtonCard(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+
+	r.hc.SetScreen(addrT1, strings.Join([]string{
+		" We're changing auto mode.",
+		"",
+		" Nothing breaks: auto mode keeps working.",
+		"",
+		" Enter to continue · Esc to cancel",
+	}, "\n"))
+	r.setBlocked()
+	r.waitFor(t, "合成按钮卡", func() bool { return r.countCalls("PostDialog") == 1 })
+	if r.countCalls("Post") != 0 {
+		t.Fatalf("posts = %d, want the button card instead of text", r.countCalls("Post"))
+	}
+	st, _ := r.store.Read()
+	if _, ok := st.OpenCards["default|t1"]; !ok {
+		t.Fatal("the synthesized card must be an open card")
+	}
+
+	// 点 1. Continue → 复核同 key → 按 enter。
+	result, err := r.chat.Handlers.OnAction(r.click("1", "Continue (Enter)", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Toast, "✔ 1. Continue (Enter)") {
+		t.Fatalf("toast = %q", result.Toast)
+	}
+	pressed := false
+	for _, k := range r.hc.KeysPressed() {
+		if k.Address != addrT1 {
+			continue
+		}
+		if len(k.Keys) == 1 && k.Keys[0] == "enter" {
+			pressed = true
+		}
+		if len(k.Keys) == 1 && k.Keys[0] == "1" {
+			t.Fatal("a synthesized card must never press digits")
+		}
+	}
+	if !pressed {
+		t.Fatalf("enter was not pressed: %+v", r.hc.KeysPressed())
+	}
+}
+
+// 光标选择 ( ❯ ) 的确认屏绝不合成按钮——Enter 跟光标走，按什么全看它指着哪。
+func TestCursorChoiceStaysATextCard(t *testing.T) {
+	r := harness(t)
+	r.reader.DialogErr = readers.ErrNoHook
+	r.hc.SetScreen(addrT1, trustScreen) // intake_confirm_test.go 的真实信任屏
+	r.hc.Change(sessDefault, keyStatus, addrT1, map[string]any{
+		keyStatus: map[string]any{keyState: stateBlocked, keyApp: appFake, "kind": kindDialog, "msg": "trust"},
+	})
+
+	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
+		t.Fatalf("postBlocked: %v", err)
+	}
+	if r.countCalls("PostDialog") != 0 {
+		t.Fatalf("PostDialog = %d, a cursor choice must not get buttons", r.countCalls("PostDialog"))
+	}
+	if r.countCalls("Post") != 1 {
+		t.Fatalf("posts = %d, want the plain screen notice", r.countCalls("Post"))
 	}
 }

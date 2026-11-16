@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
 
 // 屏幕菜单解析：
@@ -175,3 +177,56 @@ func dialogText(lines []string, top, first int) string {
 
 // AskID 校验 herdrchat.ask 标签的形状 "<秒>-<pid>"。
 func AskID(id string) bool { return menuAskIDRe.MatchString(id) }
+
+// 屏幕自己声明的确认路：Enter 前进、Esc 取消。
+var (
+	enterHintRe    = regexp.MustCompile(`(?i)enter[^\n]{0,30}(continue|confirm|proceed)`)
+	escHintRe      = regexp.MustCompile(`(?i)esc[^\n]{0,20}cancel`)
+	cursorChoiceRe = regexp.MustCompile(`(?m)^\s*[❯›]\s*\S`)
+	arrowNavRe     = regexp.MustCompile(`↑|↓`)
+)
+
+// confirmTailLines 是合成判定只看的屏尾行数 ( 提示行坐在底部 )。
+const confirmTailLines = 8
+
+// ConfirmMenuOf 把「Enter to continue · Esc to cancel」形状的无编号屏合成按钮：
+// 屏幕自己声明了 Enter 前进、Esc 取消，按钮忠实转述这两条路——
+// 点击按它声明的键，绝不按数字。取消由卡自带的 Esc 按钮走，故只此一项。
+//
+// 光标选择 ( ❯ 停在某个选项上 ) 或方向键导航的屏不吃 Enter——
+// 那要按位置走，Enter 会确认光标所指，无论指什么——一律不合成。
+// 没有这形状返回 nil。
+func ConfirmMenuOf(screenText string) *Menu {
+	lines := strings.Split(screenText, "\n")
+	if n := len(lines); n > confirmTailLines {
+		lines = lines[n-confirmTailLines:]
+	}
+	tail := strings.Join(lines, "\n")
+	if !enterHintRe.MatchString(tail) || !escHintRe.MatchString(tail) {
+		return nil
+	}
+	if cursorChoiceRe.MatchString(screenText) || arrowNavRe.MatchString(screenText) {
+		return nil
+	}
+
+	// 身份哈希盖住卡片正文那一屏 ( 看见什么，核对的就是什么 )。
+	shown := hccli.TidyScreen(screenText, menuTextLines)
+	//nolint:gosec // G401: 对话框身份哈希，非安全用途。
+	sum := sha1.Sum([]byte(shown))
+	return &Menu{
+		Key: "cfm" + hex.EncodeToString(sum[:])[:9],
+		// 与编号菜单同一纪律：两次读到同一个 key 才采信。
+		Framed:  true,
+		Options: []MenuOption{{N: 1, Label: "Continue (Enter)"}},
+		Keys:    map[int][]string{1: {"enter"}},
+	}
+}
+
+// MenuWithConfirm：一屏的菜单。编号菜单优先；
+// 没有编号、但屏幕自己声明了 Enter/Esc 两条路的，合成转述按钮。
+func MenuWithConfirm(screenText string) *Menu {
+	if m := MenuOf(screenText); m != nil {
+		return m
+	}
+	return ConfirmMenuOf(screenText)
+}

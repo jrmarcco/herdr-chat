@@ -167,7 +167,11 @@ the screen, below.
 
 ### From the screen
 
-A button presses that option's number key in the terminal (Esc presses esc). A question
+A button presses that option's number key in the terminal (Esc presses esc). A screen with
+no numbered choices but its own "Enter to continue · Esc to cancel" line gets one synthesized
+Continue button (plus the card's Esc); the tap presses the key the screen itself named, never
+a digit. Cursor-choice screens (a ❯ on an option) are never given buttons — Enter would
+confirm whatever the cursor points at. A question
 with previews (a box beside its options) takes no number, so there the button moves with
 the arrows from the cursor to that option and presses Enter. In a multi-select, a box is
 ticked on the card only, at once; Next sends them all: each box that differs from the

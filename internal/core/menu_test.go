@@ -293,3 +293,50 @@ func TestScreenCorpus(t *testing.T) {
 	}
 	t.Logf("语料 %d 份，其中 %d 份带编号菜单", len(entries), menus)
 }
+
+// 合成按钮：
+// 屏幕没有编号、但自己声明了「Enter 前进 · Esc 取消」—— 按钮忠实转述这两条路；
+// 点击按它声明的键，绝不按数字。
+func TestConfirmMenuSynthesizedFromTheScreenOwnWords(t *testing.T) {
+	notice := " We're changing auto mode.\n\n Nothing breaks: auto mode keeps working.\n\n Enter to continue · Esc to cancel"
+	m := ConfirmMenuOf(notice)
+	if m == nil {
+		t.Fatal("a screen that offers enter/esc must get buttons")
+	}
+	if len(m.Options) != 1 || m.Options[0].N != 1 {
+		t.Fatalf("options = %+v, want the single continue", m.Options)
+	}
+	if got := m.Keys[1]; len(got) != 1 || got[0] != "enter" {
+		t.Fatalf("keys[1] = %v, want exactly enter", got)
+	}
+	if m.Key != ConfirmMenuOf(notice).Key {
+		t.Fatal("the same screen must keep the same key")
+	}
+	if MenuWithConfirm(notice) == nil || MenuWithConfirm(notice).Keys == nil {
+		t.Fatal("MenuWithConfirm must hand back the synthesized menu")
+	}
+}
+
+// Enter 跟光标走的屏 ( ❯ 选项、方向键导航 )、没有声明的屏，一律不合成。
+func TestConfirmMenuRefusesWhatEnterWouldMisanswer(t *testing.T) {
+	cases := map[string]string{
+		"cursor choice":  " ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel",
+		"arrow navigate": " ↑/↓ Navigate · enter Confirm · esc Cancel",
+		"no hints":       "just some text on a screen",
+		"enter only":     " Press enter to continue",
+	}
+	for name, screen := range cases {
+		if m := ConfirmMenuOf(screen); m != nil {
+			t.Fatalf("%s: synthesized %+v, want none", name, m)
+		}
+	}
+}
+
+// 编号菜单永远优先，合成不与它混作。
+func TestNumberedMenuWinsOverSynthesis(t *testing.T) {
+	numbered := " Do you want to proceed?\n 1. Yes\n 2. No\n\n Esc to cancel · enter to confirm"
+	m := MenuWithConfirm(numbered)
+	if m == nil || m.Keys != nil {
+		t.Fatalf("menu = %+v, want the numbered one without keys", m)
+	}
+}
