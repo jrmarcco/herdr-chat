@@ -165,6 +165,9 @@ func TestNewCardSessionDropdown(t *testing.T) {
 	if len(d.Selects) != 1 || d.Selects[0].Name != fieldAgent {
 		t.Fatalf("selects = %+v, want agent only", d.Selects)
 	}
+	if !strings.Contains(d.Markdown, "Session: "+sessDefault+".") {
+		t.Fatalf("markdown = %q, want the session named", d.Markdown)
+	}
 
 	// 多 session：多一个 session 下拉。
 	r.e.Sessions = []string{sessDefault, sessWork}
@@ -173,6 +176,9 @@ func TestNewCardSessionDropdown(t *testing.T) {
 	d = r.postedDialog()
 	if len(d.Selects) != 2 || d.Selects[1].Name != fieldSession || len(d.Selects[1].Options) != 2 {
 		t.Fatalf("selects = %+v, want agent + session", d.Selects)
+	}
+	if strings.Contains(d.Markdown, "Session:") {
+		t.Fatalf("markdown = %q, the dropdown already says it", d.Markdown)
 	}
 
 	// 提交带上 session：终端开在那个 session 上。

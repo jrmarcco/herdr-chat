@@ -298,6 +298,14 @@ func (e *Engine) newTerminal(args []string, where core.Where) string {
 	return msg
 }
 
+// firstSession：跟随的第一个 session ( 单 session 卡面点名用 )。
+func (e *Engine) firstSession() string {
+	if len(e.Sessions) > 0 {
+		return e.Sessions[0]
+	}
+	return "default"
+}
+
 // newCardSelects：/new 卡的下拉。agent 恒有；session 只在跟随多个时出现
 // ( 单 session 的下拉是噪音 )，且只能选 bot 自己跟随的——不跟随的 session
 // 开出来的终端没有镜像，等于黑洞。
@@ -343,9 +351,14 @@ func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionRes
 // newTerminalCard：/new 的开终端卡——目录输入与 agent 下拉同在一张表单：
 // 按钮点击不携带输入内容、只有表单提交带，两者要一次带走就得同表单。
 func (e *Engine) newTerminalCard(where core.Where) string {
+	markdown := "Which folder should it work in? Under your home, relative (`Projects/foo`)."
+	if len(e.Sessions) < 2 {
+		// 单 session 没有下拉：卡面点名它，免得"会开到哪个 core"没有落点。
+		markdown += "\nSession: " + e.firstSession() + "."
+	}
 	dialog := core.Dialog{
 		Title:     "🆕 New terminal",
-		Markdown:  "Which folder should it work in? Under your home, relative (`Projects/foo`).",
+		Markdown:  markdown,
 		DoneTitle: DoneTitle,
 		Menu: &core.Menu{
 			Key:  newKey,
