@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	_ "embed"
@@ -74,7 +75,7 @@ func PlacesOf(env map[string]string, home string) Places {
 	}
 }
 
-// fileOf / dirOf：一个 agent 的设置文件与它所在的目录。
+// fileOf 一个 agent 的设置文件与它所在的目录。
 func fileOf(p Places, agent string) string {
 	if agent == agentCodex {
 		return p.Codex
@@ -241,14 +242,17 @@ func InstallHooks(agents []string, p Places) error {
 	if err := os.MkdirAll(filepath.Dir(p.Hook), 0o700); err != nil {
 		return err
 	}
+
 	//nolint:gosec // G306: hook 是要被 sh 执行的脚本，0700 是它该有的 mode。
 	if err := os.WriteFile(p.Hook, AskSh, 0o700); err != nil {
 		return err
 	}
+
 	//nolint:gosec // G302: 同上，已存在的旧文件也要可执行。
 	if err := os.Chmod(p.Hook, 0o700); err != nil {
 		return err
 	}
+
 	for _, agent := range agents {
 		err := editObject(p, agent, func(m map[string]any) bool {
 			setPermissionRequest(m, append(others(permissionRequest(m)), entry(p, agent)))
@@ -270,15 +274,18 @@ func UninstallHooks(p Places) error {
 			list := permissionRequest(m)
 			kept := others(list)
 			if len(kept) == len(list) {
-				return false // 没有我的条目：文件不动
+				// 没有我的条目：文件不动。
+				return false
 			}
 			setPermissionRequest(m, kept)
 			return true
 		})
+
 		if err != nil && first == nil {
 			first = err
 		}
 	}
+
 	if err := os.Remove(p.Hook); err != nil && !os.IsNotExist(err) && first == nil {
 		first = err
 	}
@@ -303,11 +310,8 @@ func StatusOf(p Places) []Status {
 		}
 		in := false
 		if m, _, _, err := readObject(file); err == nil && m != nil {
-			for _, item := range permissionRequest(m) {
-				if isMine(item) {
-					in = true
-					break
-				}
+			if slices.ContainsFunc(permissionRequest(m), isMine) {
+				in = true
 			}
 		}
 		out = append(out, Status{Agent: agent, There: there, In: in})

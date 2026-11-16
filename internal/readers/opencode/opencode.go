@@ -32,6 +32,7 @@ import (
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
+	"github.com/jrmarcco/herdr-chat/internal/shell"
 	"github.com/jrmarcco/herdr-chat/internal/state"
 )
 
@@ -101,8 +102,6 @@ func short(s string, maxLen int) string {
 	return one
 }
 
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
-
 const exitMark = "__herdrchat_exit="
 
 // api 调一次 OpenCode 的 API ( 在 cwd 下跑，API 按那个目录的项目作答 )。
@@ -110,17 +109,17 @@ const exitMark = "__herdrchat_exit="
 func (r *Reader) api(ctx context.Context, session, machine, cwd, operation string, params map[string]string, body any, whole bool) (any, bool) {
 	args := operation
 	for k, v := range params {
-		args += fmt.Sprintf(" --param %s", shellQuote(k+"="+v))
+		args += fmt.Sprintf(" --param %s", shell.Quote(k+"="+v))
 	}
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err == nil {
-			args += " -d " + shellQuote(string(raw))
+			args += " -d " + shell.Quote(string(raw))
 		}
 	}
 
 	out, err := r.Shell(ctx, session, machine,
-		fmt.Sprintf("cd %s && opencode api %s 2>/dev/null; echo \"%s$?\"", shellQuote(cwd), args, exitMark))
+		fmt.Sprintf("cd %s && opencode api %s 2>/dev/null; echo \"%s$?\"", shell.Quote(cwd), args, exitMark))
 	if err != nil {
 		return nil, false
 	}

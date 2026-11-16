@@ -95,6 +95,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 	home := t.TempDir()
 	p := PlacesOf(nil, home)
 	mustWrite(t, p.Claude, mineJSON)
+
 	var mine map[string]any
 	if err := json.Unmarshal([]byte(mineJSON), &mine); err != nil {
 		t.Fatal(err)
@@ -105,6 +106,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 			t.Fatal(err)
 		}
 	}
+
 	after := readJSON(t, p.Claude)
 	if after["model"] != "x" {
 		t.Fatalf("model = %v, yours is kept", after["model"])
@@ -112,6 +114,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 	if n := len(permissionRequest(after)); n != 2 {
 		t.Fatalf("PermissionRequest has %d entries, want yours and herdrchat's once", n)
 	}
+
 	hook := firstHook(t, after, 1)
 	if cmd, _ := hook["command"].(string); !regexp.MustCompile(`herdrchat/hooks/ask\.sh' claude 1790$`).MatchString(cmd) {
 		t.Fatalf("command = %q", cmd)
@@ -125,6 +128,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 	if _, err := os.Stat(filepath.Join(home, ".codex")); !os.IsNotExist(err) {
 		t.Fatal("an agent that is not set up here is left alone")
 	}
+
 	info, err := os.Stat(p.Hook)
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +136,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 	if info.Mode().Perm() != 0o700 {
 		t.Fatalf("hook mode = %o, want 700", info.Mode().Perm())
 	}
+
 	want := []Status{{Agent: agentClaude, There: true, In: true}, {Agent: agentCodex}}
 	if got := StatusOf(p); !reflect.DeepEqual(got, want) {
 		t.Fatalf("status = %+v, want %+v", got, want)
@@ -150,6 +155,7 @@ func TestInstallBesideWhatIsThereOnceWithABackupAndUninstallTakesOnlyItOut(t *te
 
 func TestCodexGetsAStatusLineAndAFileThatIsNotJSONIsNeverTouched(t *testing.T) {
 	home := t.TempDir()
+
 	p := PlacesOf(nil, home)
 	if err := os.MkdirAll(filepath.Dir(p.Codex), 0o700); err != nil {
 		t.Fatal(err)
@@ -157,6 +163,7 @@ func TestCodexGetsAStatusLineAndAFileThatIsNotJSONIsNeverTouched(t *testing.T) {
 	if err := InstallHooks([]string{agentCodex}, p); err != nil {
 		t.Fatal(err)
 	}
+
 	hook := firstHook(t, readJSON(t, p.Codex), 0)
 	if cmd, _ := hook["command"].(string); !strings.HasSuffix(cmd, " codex 590") {
 		t.Fatalf("command = %q", cmd)
@@ -173,6 +180,7 @@ func TestCodexGetsAStatusLineAndAFileThatIsNotJSONIsNeverTouched(t *testing.T) {
 
 	const broken = "{ not json"
 	mustWrite(t, p.Claude, broken)
+
 	err := InstallHooks([]string{agentClaude, agentCodex}, p)
 	if err == nil || !strings.Contains(err.Error(), "not a JSON object") {
 		t.Fatalf("err = %v, want it to say the file is not a JSON object", err)
@@ -207,6 +215,7 @@ func TestUninstallLeavesNoTraceAndKeepsTheMode(t *testing.T) {
 	if got := readJSON(t, p.Claude); !reflect.DeepEqual(got, map[string]any{"model": "x"}) {
 		t.Fatalf("after uninstall = %v", got)
 	}
+
 	// 再卸一遍：什么都没有，也不出错。
 	if err := UninstallHooks(p); err != nil {
 		t.Fatalf("uninstalling twice: %v", err)

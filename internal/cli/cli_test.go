@@ -106,6 +106,7 @@ func TestInitWritesAStarterConfig(t *testing.T) {
 	if code := a.Run([]string{cmdInit}); code != 0 {
 		t.Fatalf("code %d", code)
 	}
+
 	pl, _ := config.PlacesOf(a.Env, a.Home)
 	file := a.configFile(pl)
 	//nolint:gosec // G304: 测试自己写的临时文件。
@@ -141,6 +142,7 @@ func TestLogsFiltersTailsAndPicksADay(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
+
 	today := time.Now().Format("2006-01-02")
 	lines := "12:00:01.000 INFO  feishu     connected\n" +
 		"12:00:05.000 WARN  engine    a retry recovered\n" +

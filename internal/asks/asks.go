@@ -22,9 +22,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
+	"github.com/jrmarcco/herdr-chat/internal/shell"
 )
 
 const (
@@ -41,11 +43,6 @@ const (
 )
 
 var askIDRe = regexp.MustCompile(`^(\d+)-(\d+)$`)
-
-// shellQuote 把一段 shell 文本安全地包进单引号。
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
 
 // AskOf 读终端标签上等待中的请求 id；形状不对返回 ""。
 func AskOf(record hccli.Terminal) string {
@@ -64,22 +61,25 @@ type Ask struct {
 	ID       string
 	Agent    string
 	Terminal string
-	At       string
-	Request  json.RawMessage
+
+	At      int64 // 请求落盘的 unix 秒 ( hook 写的是不带引号的数字 )
+	Request json.RawMessage
 }
 
 // Asks 是 hook 协议在引擎侧的全部状态：
 // hook 在场缓存、每请求的部分答案、已答完的请求。
 // 远端机器的读写走 hc exec，本机直接文件与 sh。
 type Asks struct {
+	mu sync.Mutex
+
 	hc      core.HC
 	homeDir string // 本机分支的 home ( 测试注入 )
-	mu      sync.Mutex
 
-	hookSeen map[string]hookSeenAt
-	partials map[string]map[string]string
-	finished map[string]bool
-	finOrder []string
+	hookSeen  map[string]hookSeenAt
+	partials  map[string]map[string]string
+	partOrder []string // partials 的插入序 ( forgetAt 封顶，最旧的先忘；答完的懒着删 )
+	finished  map[string]bool
+	finOrder  []string
 }
 
 type hookSeenAt struct {
@@ -90,7 +90,9 @@ type hookSeenAt struct {
 // New 建一份 asks 状态。
 func New(hc core.HC, homeDir string) *Asks {
 	return &Asks{
-		hc: hc, homeDir: homeDir,
+		hc:      hc,
+		homeDir: homeDir,
+
 		hookSeen: map[string]hookSeenAt{},
 		partials: map[string]map[string]string{},
 		finished: map[string]bool{},
@@ -103,14 +105,21 @@ func (a *Asks) hookThere(ctx context.Context, session, machine string) bool {
 	a.mu.Lock()
 	seen, ok := a.hookSeen[machine]
 	a.mu.Unlock()
+
 	if ok && time.Since(seen.at) < hookCheckEvery {
 		return seen.there
 	}
-	out, _ := a.hc.HomeShell(ctx, session, machine, "[ -f "+shellQuote(HookFile)+" ] && echo yes")
+
+	out, _ := a.hc.HomeShell(ctx, session, machine, "[ -f "+shell.Quote(HookFile)+" ] && echo yes")
 	there := strings.TrimSpace(out) == "yes"
+
 	a.mu.Lock()
-	a.hookSeen[machine] = hookSeenAt{at: time.Now(), there: there}
+	a.hookSeen[machine] = hookSeenAt{
+		at:    time.Now(),
+		there: there,
+	}
 	a.mu.Unlock()
+
 	return there
 }
 
@@ -136,12 +145,15 @@ func (a *Asks) OpenAsk(ctx context.Context, session, address, agent string) (ask
 	if err != nil {
 		term = nil
 	}
+
 	id := AskOf(term)
 	if id == "" || a.isFinished(id) {
 		return nil, a.hookThere(ctx, session, machine)
 	}
+
 	pid := askIDRe.FindStringSubmatch(id)[2]
-	out, _ := a.hc.HomeShell(ctx, session, machine, "kill -0 "+pid+" 2>/dev/null && cat "+shellQuote(AsksDir+"/req/"+id+".json"))
+	out, _ := a.hc.HomeShell(ctx, session, machine, "kill -0 "+pid+" 2>/dev/null && cat "+shell.Quote(AsksDir+"/req/"+id+".json"))
+
 	var parsed Ask
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		return nil, true
@@ -149,6 +161,7 @@ func (a *Asks) OpenAsk(ctx context.Context, session, address, agent string) (ask
 	if parsed.Agent != agent || len(parsed.Request) == 0 {
 		return nil, true
 	}
+
 	parsed.ID = id
 	return &parsed, true
 }
@@ -159,8 +172,12 @@ func (a *Asks) AskOpen(ctx context.Context, session, machine, id string) bool {
 		return false
 	}
 	pid := askIDRe.FindStringSubmatch(id)[2]
-	out, _ := a.hc.HomeShell(ctx, session, machine,
-		"[ -f "+shellQuote(AsksDir+"/req/"+id+".json")+" ] && kill -0 "+pid+" 2>/dev/null && echo open")
+	out, _ := a.hc.HomeShell(
+		ctx,
+		session,
+		machine,
+		"[ -f "+shell.Quote(AsksDir+"/req/"+id+".json")+" ] && kill -0 "+pid+" 2>/dev/null && echo open",
+	)
 	return strings.TrimSpace(out) == "open"
 }
 
@@ -182,21 +199,25 @@ func (a *Asks) AsksHere() bool {
 // ( Codex 经共享后台服务把hook 跑在终端之外时如此 )；
 // nil 没有匹配的。
 func (a *Asks) StrayAsk(ctx context.Context, session, machine, agent string) *Ask {
-	script := "cd " + shellQuote(AsksDir+"/req") + " 2>/dev/null && for f in *.json; do [ -f \"$f\" ] || continue; id=\"${f%.json}\"; kill -0 \"${id#*-}\" 2>/dev/null || continue; printf '%s\\t' \"$id\"; tr -d '\\n' < \"$f\"; echo; done"
+	script := "cd " + shell.Quote(AsksDir+"/req") + " 2>/dev/null && for f in *.json; do [ -f \"$f\" ] || continue; id=\"${f%.json}\"; kill -0 \"${id#*-}\" 2>/dev/null || continue; printf '%s\\t' \"$id\"; tr -d '\\n' < \"$f\"; echo; done"
 	out, _ := a.hc.HomeShell(ctx, session, machine, script)
-	for _, line := range strings.Split(out, "\n") {
-		tab := strings.Index(line, "\t")
-		if tab < 0 {
+	for line := range strings.SplitSeq(out, "\n") {
+		before, after, ok := strings.Cut(line, "\t")
+		if !ok {
 			continue
 		}
-		id := line[:tab]
+
+		id := before
 		if !askIDRe.MatchString(id) || a.isFinished(id) {
 			continue
 		}
+
 		var parsed Ask
-		if err := json.Unmarshal([]byte(line[tab+1:]), &parsed); err != nil {
-			continue // 写了一半：下一眼再看
+		if err := json.Unmarshal([]byte(after), &parsed); err != nil {
+			// 写了一半：下一眼再看。
+			continue
 		}
+
 		if parsed.Agent == agent && parsed.Terminal == "" && len(parsed.Request) != 0 {
 			parsed.ID = id
 			return &parsed
@@ -210,10 +231,11 @@ func (a *Asks) write(ctx context.Context, session, machine, id, decision string)
 	if !askIDRe.MatchString(id) {
 		return false
 	}
+
 	req := AsksDir + "/req/" + id + ".json"
 	ans := AsksDir + "/ans/" + id + ".json"
-	script := "[ -f " + shellQuote(req) + " ] && printf '%s' " + shellQuote(decision) +
-		" > " + shellQuote(ans+".tmp") + " && mv " + shellQuote(ans+".tmp") + " " + shellQuote(ans) + " && echo written"
+	script := "[ -f " + shell.Quote(req) + " ] && printf '%s' " + shell.Quote(decision) +
+		" > " + shell.Quote(ans+".tmp") + " && mv " + shell.Quote(ans+".tmp") + " " + shell.Quote(ans) + " && echo written"
 	out, _ := a.hc.HomeShell(ctx, session, machine, script)
 	return strings.TrimSpace(out) == "written"
 }
@@ -236,16 +258,25 @@ func (a *Asks) AnswerAsk(ctx context.Context, session, address, agent string, sh
 	if !known || ask == nil {
 		return false
 	}
+
 	ref, _ := shown.Menu.Own.(*Ref)
 	if ref == nil || ask.ID != ref.ID {
 		return false
 	}
+
 	out := decide(ask, *shown, reply, a.PartialOf(ask.ID))
 	if out == nil {
 		return false
 	}
 	if out.Partial != nil {
 		a.mu.Lock()
+		if _, seen := a.partials[ask.ID]; !seen {
+			a.partOrder = append(a.partOrder, ask.ID)
+			if len(a.partOrder) > forgetAt {
+				delete(a.partials, a.partOrder[0])
+				a.partOrder = a.partOrder[1:]
+			}
+		}
 		a.partials[ask.ID] = out.Partial
 		a.mu.Unlock()
 		return true
@@ -253,6 +284,7 @@ func (a *Asks) AnswerAsk(ctx context.Context, session, address, agent string, sh
 	if !a.write(ctx, session, hccli.MachineOf(address), ask.ID, out.Decision) {
 		return false
 	}
+
 	a.mu.Lock()
 	delete(a.partials, ask.ID)
 	a.finished[ask.ID] = true
@@ -278,12 +310,13 @@ type Ref struct {
 //
 // Claude Code 与 Codex 的 PermissionRequest 都这么收。
 func DecisionJSON(decision map[string]any) string {
-	out, err := json.Marshal(map[string]any{
-		"hookSpecificOutput": map[string]any{
-			"hookEventName": "PermissionRequest",
-			"decision":      decision,
-		},
-	})
+	out, err := json.Marshal(
+		map[string]any{
+			"hookSpecificOutput": map[string]any{
+				"hookEventName": "PermissionRequest",
+				"decision":      decision,
+			},
+		})
 	if err != nil {
 		return ""
 	}
@@ -304,6 +337,10 @@ func Clip(text string, maxChars int, lines int) string {
 	out := strings.Join(all[:min(lines, len(all))], "\n")
 	cut := len(all) > lines
 	if len(out) > maxChars {
+		// 退到 rune 边界再切：别把一个多字节字符切成两半，那在卡片上是乱码。
+		for maxChars > 0 && !utf8.RuneStart(out[maxChars]) {
+			maxChars--
+		}
 		out = out[:maxChars]
 		cut = true
 	}

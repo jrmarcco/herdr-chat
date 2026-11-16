@@ -39,7 +39,9 @@ mkdir -p "$d/req" "$d/ans" 2>/dev/null || exit 0
 find "$d/req" "$d/ans" -type f -mmin +1440 -exec rm -f {} + 2>/dev/null
 
 # <seconds>-<this pid>: herdrchat tells a live request from one left behind by the pid
-id="$(date +%s)-$$"
+# (one clock reading: the "at" field and the id's seconds never disagree)
+at=$(date +%s)
+id="$at-$$"
 req="$d/req/$id.json"
 ans="$d/ans/$id.json"
 
@@ -54,8 +56,8 @@ done_() {
 trap done_ TERM INT HUP
 
 {
-  printf '{"agent":"%s","terminal":"%s","at":%s,"request":' "$agent" "$t" "$(date +%s)"
-  cat
+  printf '{"agent":"%s","terminal":"%s","at":%s,"request":' "$agent" "$t" "$at"
+  cat || done_ # stdin gone: no request to ask
   printf '}\n'
 } > "$req.tmp" 2>/dev/null && mv "$req.tmp" "$req" 2>/dev/null || done_
 [ -z "$t" ] || hc label "$t" "herdrchat.ask=$id" >/dev/null 2>&1 || done_

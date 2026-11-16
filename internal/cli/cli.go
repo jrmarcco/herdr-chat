@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/config"
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 	"github.com/jrmarcco/herdr-chat/internal/service"
+	"github.com/jrmarcco/herdr-chat/internal/shell"
 )
 
 // usage 是给终端看的说明文案。
@@ -51,7 +53,6 @@ const (
 	PairPollWait = 2 * time.Second
 )
 
-// 用得多的字面量收拢
 const (
 	chatFeishu   = "feishu"
 	keyAppID     = "FEISHU_APP_ID"
@@ -141,7 +142,7 @@ func (a *App) Run(args []string) int {
 	}
 }
 
-// takeProfile 摘出全局 --profile，其余原样返回。
+// takeProfile 摘出全局 profile，其余原样返回。
 func (a *App) takeProfile(args []string) []string {
 	var rest []string
 	for i := 0; i < len(args); i++ {
@@ -162,8 +163,7 @@ func (a *App) takeProfile(args []string) []string {
 }
 
 func (a *App) println(s ...any) {
-	// EPIPE 由 PipeSafe 收场；
-	// 写不进就写不进。
+	// EPIPE 由 PipeSafe 收场；写不进就写不进。
 	_, _ = fmt.Fprintln(a.Stdout, s...)
 }
 
@@ -250,7 +250,9 @@ func (a *App) ready() (config.Places, config.Config, bool) {
 	return pl, cfg, true
 }
 
-// --- 日志文件 --- // logDir 是 bot 的日志目录 ( logs/ )。
+// --- 日志文件 ---
+
+// logDir 是 bot 的日志目录 ( logs/ )。
 func (a *App) logDir(pl config.Places) string {
 	return pl.StateDir + "/logs"
 }
@@ -316,7 +318,9 @@ func (a *App) waitConnected(pl config.Places, chat string, offset int64) int {
 		}
 		a.sleep(ConnectTick)
 	}
+
 	a.errf("herdrchat: the bot did not reach %s within %s. What went wrong:\n", chat, a.connectWait())
+
 	var errors []string
 	for _, line := range a.logSince(pl, a.logDay(), offset) {
 		if f := strings.Fields(line); len(f) >= 2 && f[1] == levelError {
@@ -363,13 +367,13 @@ func (a *App) sessionsHere() []string {
 func (a *App) allSessions(cfg config.Config) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, s := range append(append([]string(nil), cfg.Sessions...), a.sessionsHere()...) {
+	for _, s := range slices.Concat(cfg.Sessions, a.sessionsHere()) {
 		if !seen[s] {
 			seen[s] = true
 			out = append(out, s)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -380,6 +384,7 @@ func (a *App) checkSessions(cfg config.Config) bool {
 	for _, s := range a.sessionsHere() {
 		here[s] = true
 	}
+
 	var missing []string
 	for _, s := range cfg.Sessions {
 		if !here[s] {
@@ -389,8 +394,11 @@ func (a *App) checkSessions(cfg config.Config) bool {
 	if len(missing) == 0 {
 		return true
 	}
-	a.errf("herdrchat: session %s is not on this machine (ls ~/.local/state/herdr-core says: %s)\n",
-		strings.Join(missing, ", "), strings.Join(a.sessionsHere(), ", "))
+	a.errf(
+		"herdrchat: session %s is not on this machine (ls ~/.local/state/herdr-core says: %s)\n",
+		strings.Join(missing, ", "),
+		strings.Join(a.sessionsHere(), ", "),
+	)
 	return false
 }
 
@@ -449,28 +457,24 @@ func (a *App) stopEverywhere(ctx context.Context, pl config.Places, cfg config.C
 	return stopped
 }
 
-// shellQuote 单引号包裹一段 shell 文本。
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // loopScript 是无服务时 bot 所在 hc 终端里跑的循环：退了 3 秒后再来。
 func (a *App) loopScript(pl config.Places) string {
 	env := service.EnvFor(a.Env, pl.Profile)
-	delete(env, "PATH") // PATH 用终端自己的；其余变量才需要带进去
+	// PATH 用终端自己的；其余变量才需要带进去。
+	delete(env, "PATH")
 
 	var assigns []string
 	for _, k := range sortedKeysOf(env) {
-		assigns = append(assigns, "export "+shellQuote(k+"="+env[k]))
+		assigns = append(assigns, "export "+shell.Quote(k+"="+env[k]))
 	}
 	script := strings.Join(assigns, "\n")
 	if script != "" {
 		script += "\n"
 	}
-	// 只引二进制的路径：把 " run" 一起引进去，
+	// 只引二进制的路径：把 "run" 一起引进去，
 	// sh 会去找一个名字里带空格的可执行文件
 	// ( 127 not found —— 教训记在这 )。
-	return script + "while true; do " + shellQuote(a.Bin) + " run" + `; echo "herdrchat stopped ($?), starting again in 3 s"; sleep 3; done`
+	return script + "while true; do " + shell.Quote(a.Bin) + " run" + `; echo "herdrchat stopped ($?), starting again in 3 s"; sleep 3; done`
 }
 
 func sortedKeysOf(m map[string]string) []string {

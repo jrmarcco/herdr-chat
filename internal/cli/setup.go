@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -80,21 +81,21 @@ func (a *App) cmdSetup([]string) int {
 
 	// 4. sessions：列出本机的，逗号分隔；
 	// 回车全 default。
-	here := a.sessionsHere
-	if len(here()) == 0 {
+	here := a.sessionsHere()
+	if len(here) == 0 {
 		a.errf("herdrchat: no hc session on this machine (`hc server start` makes the default one)\n")
 		return 1
 	}
-	a.printf("hc sessions here: %s\n", strings.Join(here(), ", "))
+	a.printf("hc sessions here: %s\n", strings.Join(here, ", "))
 	sessions := a.ask("Sessions to mirror, comma-separated [Enter for default]: ")
 	if sessions != "" {
-		for _, s := range strings.Split(sessions, ",") {
+		for s := range strings.SplitSeq(sessions, ",") {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue
 			}
-			if !contains(here(), s) {
-				a.errf("herdrchat: session %s is not one of %s\n", s, strings.Join(here(), ", "))
+			if slices.Contains(here, s) {
+				a.errf("herdrchat: session %s is not one of %s\n", s, strings.Join(here, ", "))
 				return 1
 			}
 		}
@@ -158,15 +159,6 @@ func (a *App) stty(arg string) bool {
 	cmd := exec.CommandContext(context.Background(), "stty", arg)
 	cmd.Stdin = tty
 	return cmd.Run() == nil
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // feishuKeysWork 用 tenant_access_token/internal 即时校验一对密钥。
