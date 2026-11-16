@@ -226,7 +226,9 @@ func (e *Engine) sessionFollow(name string, follow bool) string {
 	if err := e.SetSessions(next); err != nil {
 		return "Not saved: " + err.Error()
 	}
-	e.Sessions = next // 进程内同步：重复 add 幂等，重启后配置本就是同一份
+
+	// 进程内同步：重复 add 幂等，重启后配置本就是同一份。
+	e.Sessions = next
 	if e.Restart != nil {
 		go func() {
 			e.sleep(RestartWait)
@@ -281,7 +283,7 @@ type startRequest struct {
 
 // newTerminal：/new 的三个入口。
 //
-//	裸 /new                        → 一张卡：目录输入 + agent 下拉，一次提交开终端；
+//	/new                          → 一张卡：目录输入 + agent 下拉，一次提交开终端；
 //	/new <folder> [command…]      → 默认 session、space/tab 自动 ( tab 名取目录名 )；
 //	/new <session> <space>/<tab> [command…]
 //	                              → 旧语法；--cwd 已移除，目录承自同 space 兄弟终端。
@@ -306,9 +308,10 @@ func (e *Engine) firstSession() string {
 	return "default"
 }
 
-// newCardSelects：/new 卡的下拉。agent 恒有；session 只在跟随多个时出现
-// ( 单 session 的下拉是噪音 )，且只能选 bot 自己跟随的——不跟随的 session
-// 开出来的终端没有镜像，等于黑洞。
+// newCardSelects /new 卡的下拉，agent 恒有。
+// session 只在跟随多个时出现 ( 单 session 的下拉是噪音 )，
+// 且只能选 bot 自己跟随的——不跟随的 session 开出来的终端没有镜像，
+// 等于黑洞。
 func (e *Engine) newCardSelects() []core.Select {
 	selects := []core.Select{{Name: "agent", Options: e.agentOptions()}}
 	if len(e.Sessions) > 1 {
@@ -370,7 +373,9 @@ func (e *Engine) newTerminalCard(where core.Where) string {
 		xlog.For("engine").Warn("new 卡发送失败", "error", err)
 		return "Not sent: " + hccli.PlainError(err) + "\n`/new <folder> [command]` starts one without the card."
 	}
-	return "" // 卡已发，不再回文字
+
+	// 卡已发，不再回文字。
+	return ""
 }
 
 // newTerminalNamed：旧语法——session 与 space/tab 点名。
@@ -414,9 +419,9 @@ func (e *Engine) startTerminal(req startRequest) (string, bool) {
 			session = "default"
 		}
 	}
-	// 工作目录只认 $HOME 之下的相对路径：$HOME 本身太宽 ( 一个终端会把整个
-	// home 当仓库，agent 的信任确认也因此每次都来 )，越出 $HOME 的相对路径
-	// ( ../ ) 同样不收。
+	// 工作目录只认 $HOME 之下的相对路径：
+	// $HOME 本身太宽 ( 一个终端会把整个 home 当仓库，agent 的信任确认也因此每次都来 )，
+	// 越出 $HOME 的相对路径 ( ../ ) 同样不收。
 	folder := req.folderAbs
 	if folder == "" {
 		abs, err := e.resolveFolder(req.folder)
@@ -618,8 +623,11 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 			return err
 		}
 	}
-	// 发之前看一眼屏幕：新生终端可能停在它自己的确认上 ( Claude/Codex 的目 // 录信任这一类 ) —— hc 不报 blocked、菜单常常没有编号，盲发的话文本连着
-	// 回车一起进去，恰好确认了高亮的 "No, exit"，终端当场退出。屏幕在等确认就一个字都不发，把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
+
+	// 发之前看一眼屏幕：
+	// 新生终端可能停在它自己的确认上 ( Claude/Codex 的目 // 录信任这一类 ) —— hc 不报 blocked、菜单常常没有编号，
+	// 盲发的话文本连着回车一起进去，恰好确认了高亮的 "No, exit"，终端当场退出。
+	// 屏幕在等确认就一个字都不发，把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
 	if !force {
 		if screen := e.screen(session, address, ScreenLines); screenWaitsConfirm(screen) {
 			_, err := e.Chat.Reply(e.ctx, where, "It waits on its own confirm (trust this folder?) — nothing was typed, so it stays put. Answer it in herdr-app: the ❯ marks the choice, Enter confirms, Esc cancels (and ends it).\n\n```\n"+hccli.TidyScreen(screen, DialogLines)+"\n```")
@@ -728,7 +736,9 @@ func (e *Engine) imagesInto(message core.Message, session, address string, refs 
 			continue
 		}
 		remote, err := e.HC.PutFile(e.ctx, session, address, file)
-		_ = os.Remove(file) // 终端那边有自己的副本了
+
+		// 终端那边有自己的副本了。
+		_ = os.Remove(file)
 		if err != nil {
 			xlog.For("engine").Warn("图片送往终端失败", "error", err)
 			continue

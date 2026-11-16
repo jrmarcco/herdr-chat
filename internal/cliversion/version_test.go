@@ -46,3 +46,25 @@ func TestDevKnowsItself(t *testing.T) {
 		t.Fatal("(devel) is not a release")
 	}
 }
+
+// Go 模块伪版本 ( 本地构建的 Main.Version ) 也是开发构建：
+// v1.0.4-0.x 是 1.0.4 的预发布，比 1.0.4 旧——update 不许把它当正式版拒掉真发布。
+func TestPseudoVersionsAreDevBuilds(t *testing.T) {
+	for _, v := range []string{
+		"v1.0.4-0.20261116153509-5066e1175433",
+		"v1.0.3-0.abcdef.123",
+		"1.2.3-rc1",
+	} {
+		if !DevVersion(v) {
+			t.Fatalf("%q must count as a dev build", v)
+		}
+	}
+	for _, v := range []string{"1.0.4", "v1.0.4", "0.1.0"} {
+		if DevVersion(v) {
+			t.Fatalf("%q is a release", v)
+		}
+	}
+	if Newer("1.0.4", "v1.0.4-0.20261116153509-5066e1175433") != true {
+		t.Fatal("a release must count as newer than its own pre-release pseudo version")
+	}
+}
