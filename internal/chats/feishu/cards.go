@@ -72,7 +72,7 @@ func chunk(text string, size int) []string {
 			length = 0
 		}
 	}
-	for _, raw := range strings.Split(text, "\n") {
+	for raw := range strings.SplitSeq(text, "\n") {
 		line := raw
 		for {
 			piece := line
@@ -445,7 +445,8 @@ func MessageParts(messageType, content string) (text string, images []string, ok
 		paragraphs, _ := c["content"].([]any)
 		for _, paragraph := range paragraphs {
 			els, _ := paragraph.([]any)
-			line := ""
+
+			var line strings.Builder
 			for _, e := range els {
 				el, _ := e.(map[string]any)
 				if el == nil {
@@ -458,12 +459,15 @@ func MessageParts(messageType, content string) (text string, images []string, ok
 				} else if el["tag"] == "a" {
 					href, _ := el["href"].(string)
 					t, _ := el["text"].(string)
-					line += t + " (" + href + ")"
+					line.WriteString(t)
+					line.WriteString(" (")
+					line.WriteString(href)
+					line.WriteString(")")
 				} else if t, isStr := el["text"].(string); isStr {
-					line += t
+					line.WriteString(t)
 				}
 			}
-			lines = append(lines, line)
+			lines = append(lines, line.String())
 		}
 		return strings.TrimSpace(strings.Join(lines, "\n")), images, true
 	}

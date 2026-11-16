@@ -33,7 +33,7 @@ What it does:
   quiet; the turn's last answer arrives as its own message;
 - **Dialogs, three ways**: what the agent itself reports (its hook, its API) first — its own
   words, its own options as buttons; the screen's numbered menu next; the whole screen with
-  `/answer` and `/esc` as the fallback. The screen is re-read before any key is pressed, so
+  `/answer`, `/enter` and `/esc` as the fallback. The screen is re-read before any key is pressed, so
   an old card can never answer a newer dialog;
 - **Input both ways**: typing in a group goes into the terminal; images are placed on the
   terminal's machine with `hc put` and their path typed in beside your words;
@@ -109,7 +109,7 @@ Coming from the npm (Node) version? Stop the old one, put this binary where the
 | type | goes into the terminal |
 | send an image | placed on its machine, its path typed in beside your words |
 | `/commands` | the slash commands this agent really has here (tap to send) |
-| `/screen` `/answer <text>` `/esc` | the screen / type as-is / press esc |
+| `/screen` `/answer <text>` `/enter` `/esc` | the screen / type as-is / press enter / press esc |
 | `/history` | the conversation so far (a file and a folded post) |
 | card buttons | answer its questions (multi-select, free text, Esc) |
 

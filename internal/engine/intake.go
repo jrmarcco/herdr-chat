@@ -131,7 +131,7 @@ func (e *Engine) help() string {
 		"`/new <session> <space>/<tab> [command]` start a terminal (default `claude`); `--cwd <dir>` first to pick its folder",
 		"`/kill <session> <address>` end a terminal",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
-		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
+		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -232,7 +232,7 @@ func addressOfRun(out []byte) string {
 	return "?"
 }
 
-// typeInto 把一段文本送进终端——/history、/screen、/esc、/answer 这些房间命令之外，
+// typeInto 把一段文本送进终端——/history、/screen、/enter、/esc、/answer 这些房间命令之外，
 // 被对话框挡住时先暂存 ( 永不丢弃 )，正常时 hc send。
 func (e *Engine) typeInto(where core.Where, message core.Message, session, address, text string) error {
 	record, ok := e.viewOf(session).Get(address)
@@ -255,12 +255,16 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 		}
 		e.backfill(session, record, k, core.Room(room.Chat), room.Name, map[string]bool{"file": true, "folded": true})
 		return nil
-	case "/screen", "/esc":
-		if text == "/esc" {
-			if err := e.HC.Keys(e.ctx, session, address, []string{"esc"}); err != nil {
-				xlog.For("engine").Warn("Esc 按键失败", "error", err)
+	case "/screen", "/esc", "/enter":
+		if text != "/screen" {
+			key, word := "esc", "Esc"
+			if text == "/enter" {
+				key, word = "enter", "Enter"
 			}
-			_, err := e.Chat.Reply(e.ctx, where, "Esc pressed.\n\n"+e.screen(session, address, ScreenLines))
+			if err := e.HC.Keys(e.ctx, session, address, []string{key}); err != nil {
+				xlog.For("engine").Warn(word+" 按键失败", "error", err)
+			}
+			_, err := e.Chat.Reply(e.ctx, where, word+" pressed.\n\n"+e.screen(session, address, ScreenLines))
 			return err
 		}
 		_, err := e.Chat.Reply(e.ctx, where, e.screen(session, address, ScreenLines))
@@ -319,7 +323,7 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 		waits := strings.Contains(err.Error(), stateBlocked)
 		note := "Not delivered: " + hccli.PlainError(err)
 		if waits {
-			note += "\n\n" + e.screen(session, address, ScreenLines) + "\n\nIt waits on a dialog. Reply `/answer <text>` to answer it, or `/esc` to cancel it."
+			note += "\n\n" + e.screen(session, address, ScreenLines) + "\n\nIt waits on a dialog. Reply `/answer <text>` to answer it, `/enter` to confirm it, or `/esc` to cancel it."
 		}
 		_, replyErr := e.Chat.Reply(e.ctx, where, note)
 		if replyErr != nil {

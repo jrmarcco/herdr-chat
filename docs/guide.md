@@ -233,7 +233,7 @@ delivered (the terminal has ended) says so plainly.
   turn that took it is over); an image (alone or in a rich text message) is sent
   beside the terminal with `hc put`, on its machine, and its path is typed in with your
   text, so an agent like Claude Code opens it; `/screen`, `/answer <text>` (type into the
-  dialog it waits on, as is), `/esc`, `/history` (the conversation so far, as a file and
+  dialog it waits on, as is), `/enter` (press enter), `/esc`, `/history` (the conversation so far, as a file and
   a folded post). Dialog cards have buttons.
 - On the command line, `herdrchat hooks` says whether herdrchat's hook is in Claude Code's
   and Codex's settings; `herdrchat hooks install [claude|codex]` puts it in (it shows the
@@ -379,6 +379,6 @@ before it is started again. Tokens and secrets are never logged. The skill's
 - Avatars are drawn with `sips`, so only on macOS; elsewhere groups keep Feishu's default.
 - Without the agent naming its dialog (its API, or the hook), dialog buttons come from
   the screen's numbered menu; a dialog drawn some other way gets the screen and
-  `/answer`, `/esc`.
+  `/answer`, `/enter`, `/esc`.
 - The hook (`herdrchat hooks install`) goes in on this machine only; on a connected
   machine, install herdrchat there and run it there too.

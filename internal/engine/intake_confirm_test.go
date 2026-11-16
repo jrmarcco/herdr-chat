@@ -16,6 +16,10 @@ import (
 const (
 	termTrust = "t9"
 	callReply = "Reply"
+
+	stateLive = "live"
+	tabTrust  = "tb-trust"
+	msgM9     = "m9"
 )
 
 const trustScreen = " Accessing workspace:\n\n /home/x\n\n Quick safety check: Is this a project you created or one that you trust?\n\n Claude Code'll be able to read, edit, and execute files here.\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel\n"
@@ -26,20 +30,20 @@ func TestNothingTypedIntoAWaitingConfirm(t *testing.T) {
 
 	// 一个还没有注册成 agent 的终端 ( 新生的 claude 停在目录信任上 )——走正式的事件通路进来，视图里才有它。
 	r.hc.Change(sessDefault, "created", termTrust, map[string]any{
-		keyAddress: termTrust, keyState: "live",
-		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: "tb-trust"},
+		keyAddress: termTrust, keyState: stateLive,
+		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: tabTrust},
 	})
 
 	// 房间先注册进 state ( onMessage 按房间反查终端 )。
 	st, _ := r.store.Read()
-	st.Chats["default|t9"] = state.Room{Chat: "room-t9", Name: "api / trust", Session: sessDefault, Tab: "tb-trust"}
+	st.Chats["default|t9"] = state.Room{Chat: "room-t9", Name: "api / trust", Session: sessDefault, Tab: tabTrust}
 	if err := r.store.Write(st); err != nil {
 		t.Fatal(err)
 	}
 	r.hc.SetScreen(termTrust, trustScreen)
 	r.chat.Handlers.OnMessage(core.Incoming{
-		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: "m9"},
-		Message: "m9", Text: "hi",
+		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: msgM9},
+		Message: msgM9, Text: "hi",
 	})
 
 	r.waitFor(t, "指路回复", func() bool {
@@ -111,5 +115,56 @@ func TestScreenWaitsConfirmOverTheCorpus(t *testing.T) {
 	}
 	if checked != len(wantWaits) {
 		t.Fatalf("语料缺信任屏: %d/%d", checked, len(wantWaits))
+	}
+}
+
+// /enter：只按回车、不注入文字 —— "Enter to continue · Esc to cancel" 类告知框的确认钥匙，与 /esc 对称。
+func TestEnterPressesEnterAndNothingElse(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+
+	r.hc.Change(sessDefault, "created", termTrust, map[string]any{
+		keyAddress: termTrust, keyState: stateLive,
+		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: tabTrust},
+	})
+	st, _ := r.store.Read()
+	st.Chats["default|t9"] = state.Room{Chat: "room-t9", Name: "api / trust", Session: sessDefault, Tab: tabTrust}
+	if err := r.store.Write(st); err != nil {
+		t.Fatal(err)
+	}
+	r.hc.SetScreen(termTrust, trustScreen)
+
+	r.chat.Handlers.OnMessage(core.Incoming{
+		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: msgM9},
+		Message: msgM9, Text: "/enter",
+	})
+
+	r.waitFor(t, "Enter pressed 回复", func() bool {
+		for _, c := range r.chat.Calls() {
+			if c.Name == callReply && len(c.Args) >= 2 {
+				if md, _ := c.Args[1].(string); strings.Contains(md, "Enter pressed.") {
+					return true
+				}
+			}
+		}
+		return false
+	})
+
+	pressed := false
+	for _, k := range r.hc.KeysPressed() {
+		if k.Address == termTrust {
+			pressed = true
+			if len(k.Keys) != 1 || k.Keys[0] != "enter" {
+				t.Fatalf("keys = %v, want exactly enter", k.Keys)
+			}
+		}
+	}
+	if !pressed {
+		t.Fatal("enter was never pressed")
+	}
+	for _, sent := range r.hc.Sents() {
+		if sent.Address == termTrust {
+			t.Fatalf("/enter must not type text: %+v", sent)
+		}
 	}
 }

@@ -413,12 +413,20 @@ func (e *Engine) postIdleAsk(session, address string, record hccli.Terminal) {
 }
 
 // sendBlocked：把对话框发出去——有菜单是一张带按钮的卡 ( 置顶 + 响铃 )；
-// 没有菜单是一段文字加 /answer /esc 指引。
+// 没有菜单是一段文字加 /answer /enter /esc 指引。
 func (e *Engine) sendBlocked(session, address string, record hccli.Terminal, k string, dialog core.Dialog) error {
 	e.closeCard(k, "It moved on; see the next card.")
 	if dialog.Menu == nil {
-		msg, err := e.postTo(session, record, fmt.Sprintf(
-			"**%s**\n\n%s\n\nReply `/answer <text>` to answer it, or `/esc` to cancel it.", dialog.Title, dialog.Markdown), dialog.Footer)
+		msg, err := e.postTo(
+			session,
+			record,
+			fmt.Sprintf(
+				"**%s**\n\n%s\n\nReply `/answer <text>` to answer it, `/enter` to confirm it, or `/esc` to cancel it.",
+				dialog.Title,
+				dialog.Markdown,
+			),
+			dialog.Footer,
+		)
 		if err != nil {
 			return err
 		}
