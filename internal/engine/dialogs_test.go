@@ -114,7 +114,7 @@ func TestScreenDialogCardAndClick(t *testing.T) {
 	// blocked → 读屏发卡 ( 置顶 + 响铃 )，卡片进 state.openCards。
 	r.hc.SetScreen("t1", permissionScreen("make test"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 	r.waitFor(t, "置顶", func() bool { return r.countCalls("Pin") >= 1 })
 	r.waitFor(t, "响铃", func() bool { return r.countCalls("Ring") >= 1 })
 	st, _ := r.store.Read()
@@ -153,7 +153,7 @@ func TestStaleCardRefreshesNotPresses(t *testing.T) {
 
 	r.hc.SetScreen("t1", permissionScreen("make test"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 
 	// 屏幕换成了另一个命令的对话框：旧卡点击不按键，卡片原地刷新。
 	r.hc.SetScreen("t1", permissionScreen("rm -rf build"))
@@ -193,7 +193,7 @@ func TestFreeAnswerAndEsc(t *testing.T) {
 		"  2. Type something.",
 	}, "\n"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 
 	// 不带文字点自由输入项：提醒先输入。
 	result, err := r.chat.Handlers.OnAction(r.click("2", "Type something.", ""))
@@ -241,7 +241,7 @@ func TestLeavingBlockedClosesCard(t *testing.T) {
 
 	r.hc.SetScreen("t1", permissionScreen("make test"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 
 	// 在终端里答掉 ( 状态离开 blocked )：卡片去按钮、写上结论。
 	r.hc.SetScreen("t1", "")
@@ -285,7 +285,7 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 		},
 	})
 
-	r.waitFor(t, "agent 上报的卡", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "agent 上报的卡", func() bool { return r.countCalls(callPostDialog) == 1 })
 	if value := r.dialogCardValue(); value == nil || value["k"] != "ask-1" {
 		t.Fatalf("卡片值 = %v", value)
 	}
@@ -353,7 +353,7 @@ func TestMultiSelectTicksThenNext(t *testing.T) {
 			asks.AskLabel: "1731500000-424243",
 		},
 	})
-	r.waitFor(t, "多选卡", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "多选卡", func() bool { return r.countCalls(callPostDialog) == 1 })
 
 	// 卡上翻勾 ( 本地，立即回应 )。
 	result, err := r.chat.Handlers.OnAction(r.click("1", "Red", ""))
@@ -389,7 +389,7 @@ func TestRestartRestoresOpenCard(t *testing.T) {
 
 	r.hc.SetScreen("t1", permissionScreen("make test"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 	st, _ := r.store.Read()
 	if _, ok := st.OpenCards["default|t1"]; !ok {
 		t.Fatal("openCards 缺卡片")
@@ -411,7 +411,7 @@ func TestRestartRestoresOpenCard(t *testing.T) {
 	// 稳定采样：计数在两轮间隔后仍是 1 ( 高负载下不等固定时长 )。
 	steadyAt := 0
 	for i := 0; i < 100; i++ {
-		if got := r.countCalls("PostDialog"); got == steadyAt {
+		if got := r.countCalls(callPostDialog); got == steadyAt {
 			if got > 1 {
 				t.Errorf("同一对话框重启后不重发 ( got %d )", got)
 				return
@@ -439,7 +439,7 @@ func TestTurnDoneClosesTheDialogCard(t *testing.T) {
 
 	r.hc.SetScreen("t1", permissionScreen("make test"))
 	r.setBlocked()
-	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "对话框卡片", func() bool { return r.countCalls(callPostDialog) == 1 })
 	if got := r.countCalls("CloseDialog"); got != 0 {
 		t.Fatalf("开局不该有关卡: %d", got)
 	}
@@ -543,7 +543,7 @@ func TestConfirmNoticeBecomesAButtonCard(t *testing.T) {
 		" Enter to continue · Esc to cancel",
 	}, "\n"))
 	r.setBlocked()
-	r.waitFor(t, "合成按钮卡", func() bool { return r.countCalls("PostDialog") == 1 })
+	r.waitFor(t, "合成按钮卡", func() bool { return r.countCalls(callPostDialog) == 1 })
 	if r.countCalls("Post") != 0 {
 		t.Fatalf("posts = %d, want the button card instead of text", r.countCalls("Post"))
 	}
@@ -589,8 +589,8 @@ func TestCursorChoiceStaysATextCard(t *testing.T) {
 	if err := r.e.postBlocked(sessDefault, addrT1, r.hc.Terminals[addrT1], false, false); err != nil {
 		t.Fatalf("postBlocked: %v", err)
 	}
-	if r.countCalls("PostDialog") != 0 {
-		t.Fatalf("PostDialog = %d, a cursor choice must not get buttons", r.countCalls("PostDialog"))
+	if r.countCalls(callPostDialog) != 0 {
+		t.Fatalf("PostDialog = %d, a cursor choice must not get buttons", r.countCalls(callPostDialog))
 	}
 	if r.countCalls("Post") != 1 {
 		t.Fatalf("posts = %d, want the plain screen notice", r.countCalls("Post"))

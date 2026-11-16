@@ -101,7 +101,7 @@ Coming from the npm (Node) version? Stop the old one, put this binary where the
 | Direct chat (with the bot) | Does |
 |---|---|
 | `/ls` | the overview again (every terminal, what waits for you, links) |
-| `/new <session> <space>/<tab> [command]` | start a terminal (default `claude`; `--cwd <dir>` first) |
+| `/new`, `/new <folder> [command]` | start a terminal: bare `/new` sends a card (folder input + agent dropdown); a folder starts one right away (default `claude`, the folder's name names the tab); `/new <session> <space>/<tab> [command]` still works |
 | `/kill <session> <address>` | end a terminal |
 | `/clean` | clean up ended terminals' groups and stale files (asks first) |
 | `/auth` | let the bot act as you: mute groups, labels, pins |

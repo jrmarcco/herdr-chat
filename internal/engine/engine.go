@@ -66,16 +66,18 @@ const (
 type Engine struct {
 	mu sync.Mutex // 保护跨 lane 共享的内存状态
 
-	Chat      chats.Chat
-	HC        core.HC
-	Readers   *readers.Registry
-	Store     state.Store
-	Sessions  []string
-	History   map[string]bool   // 回填的形态：file / folded
-	Inbox     string            // 收到的图片落地的目录
-	HomeDir   string            // 本机 home ( asks 协议的文件都在这；测试注入 )
-	Env       map[string]string // 进程环境 ( XDG 目录定位用；装配处注入 )
-	StartedAt time.Time
+	Chat     chats.Chat
+	HC       core.HC
+	Readers  *readers.Registry
+	Store    state.Store
+	Sessions []string
+	History  map[string]bool // 回填的形态：file / folded
+	Inbox    string          // 收到的图片落地的目录
+	// DefaultSpace 是 /new 无兄弟 space 可承继时的 space 名 ( 装配处注入；空 = dev )。
+	DefaultSpace string
+	HomeDir      string            // 本机 home ( asks 协议的文件都在这；测试注入 )
+	Env          map[string]string // 进程环境 ( XDG 目录定位用；装配处注入 )
+	StartedAt    time.Time
 
 	// Version 是本进程的版本；Latest 问最新 release ( 装配处注入；nil 即不 // 做新版提示 )。
 	Version string

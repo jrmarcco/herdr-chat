@@ -493,6 +493,13 @@ func (f *FakeHC) ScreenTail(ctx context.Context, session, address string, lines 
 }
 
 // ScreenReads 说屏幕被读了多少次 ( 断言"不再读满 DrawTries 次"用 )。
+// RunsOf 列出已收到的 hc run 调用 ( 锁内拷贝 )。
+func (f *FakeHC) RunsOf() []RunCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]RunCall(nil), f.Runs...)
+}
+
 func (f *FakeHC) ScreenReads() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

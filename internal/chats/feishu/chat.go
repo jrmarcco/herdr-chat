@@ -516,13 +516,19 @@ func (c *Chat) onCardAction(data map[string]any) map[string]any {
 		}
 	}
 	answer, _ := form["answer"].(string)
+	fields := map[string]string{}
+	for k, v := range form {
+		if s, ok := v.(string); ok {
+			fields[k] = s
+		}
+	}
 	contextMap, _ := data["context"].(map[string]any)
 	messageID, _ := contextMap["open_message_id"].(string)
 
 	c.mu.Lock()
 	h := c.handlers
 	c.mu.Unlock()
-	out, err := h.OnAction(core.Click{Value: core.DialogValue(value), Message: core.Message(messageID), Answer: answer})
+	out, err := h.OnAction(core.Click{Value: core.DialogValue(value), Message: core.Message(messageID), Answer: answer, Form: fields})
 	_ = ticks // ticks 已在 value 里 ( form_value 的 box_<n> 键 )——引擎由 value["ticks"] 读
 	if err != nil {
 		return map[string]any{kToast: map[string]any{kType: toastError, "content": truncate(err.Error(), 200)}}
@@ -842,9 +848,16 @@ func (c *Chat) PostDialog(ctx context.Context, room core.Room, d core.Dialog, v 
 		value = map[string]any{}
 	}
 	var cardJSON map[string]any
-	if d.Menu != nil {
+	switch {
+	case d.Select != nil && d.Menu != nil:
+		placeholder := ""
+		if d.Menu.Free != nil {
+			placeholder = d.Menu.Free.Label
+		}
+		cardJSON = NewCard(d.Title, d.Markdown, placeholder, d.Footer, d.Select.Options, value)
+	case d.Menu != nil:
 		cardJSON = MenuCard(d.Title, d.Markdown, d.Menu, value, d.Footer)
-	} else {
+	default:
 		cardJSON = PlainCard(d.Markdown, d.Title, core.ToneNeeds, d.Footer)
 	}
 	contentBytes, _ := json.Marshal(cardJSON)

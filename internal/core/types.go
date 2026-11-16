@@ -76,6 +76,15 @@ type Dialog struct {
 	Markdown  string
 	DoneTitle string
 	Footer    string
+	// Select 可选：与 Free 同一张表单里的下拉 ( /new 选 agent 这类 )——
+	// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走就得同表单。
+	Select *Select
+}
+
+// Select 是卡片表单里的一个下拉：标签与候选，默认选第一个。
+type Select struct {
+	Label   string
+	Options []string
 }
 
 // DialogValue 是对话框卡片发出后携带的值，
@@ -189,11 +198,12 @@ type Incoming struct {
 }
 
 // Click 是卡片上的一次按钮点击：卡片的值、所在消息，以及卡片带输入框时
-// 自由输入的文本。
+// 表单提交的全部字段 ( Answer 是其中 "answer" 一项的快捷方式 )。
 type Click struct {
 	Value   DialogValue
 	Message Message
 	Answer  string
+	Form    map[string]string
 }
 
 // ActionResult 是点击立刻给出的回应 ( 飞书要求 3 秒内应答 )：

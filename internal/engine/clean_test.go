@@ -16,19 +16,19 @@ const (
 	snapOrphan = "t9.snap"
 )
 
-// /new 的 --cwd 规则：只认 $HOME 之下的相对路径，$HOME 本身与绝对路径都拒。
+// /new 的目录规则：只认 $HOME 之下的相对路径，$HOME 本身与绝对路径都拒。
 
 func (r *rig) newOut(args string) string {
-	return r.e.newTerminal(strings.Fields(args))
+	return r.e.newTerminal(strings.Fields(args), core.Where{})
 }
 
-func TestNewCwdRules(t *testing.T) {
+func TestNewFolderRules(t *testing.T) {
 	r := harness(t)
 	r.start(t)
 	home := r.e.HomeDir
 
 	// 相对目录：落在 $HOME/<dir>。
-	out := r.newOut("--cwd Projects/x default api/n1")
+	out := r.newOut("Projects/x")
 	if len(r.hc.Runs) != 1 || r.hc.Runs[0].Opts.Cwd != filepath.Join(home, "Projects", "x") {
 		t.Fatalf("runs = %+v (out %q)", r.hc.Runs, out)
 	}
@@ -36,14 +36,13 @@ func TestNewCwdRules(t *testing.T) {
 	// $HOME 本身（显式、`.`、空段）与绝对路径、~、越出 home 的 ..，全拒。
 	r.hc.ClearRuns()
 	for _, bad := range []string{
-		"--cwd . default api/n2",
-		"--cwd ./ default api/n2",
-		"--cwd /tmp default api/n2",
-		"--cwd ~ default api/n2",
-		"--cwd ../out default api/n2",
-		"default api/n2", // 无 --cwd 且无可沿用的兄弟
+		".",
+		"./",
+		"/tmp",
+		"~",
+		"../out",
 	} {
-		if got := r.newOut(bad); got == "" || !containsAny(got, "cannot work in $HOME", "--cwd") {
+		if got := r.newOut(bad); got == "" || !containsAny(got, "under your home", "cannot work in $HOME") {
 			t.Fatalf("%q: got %q", bad, got)
 		}
 	}
@@ -53,11 +52,11 @@ func TestNewCwdRules(t *testing.T) {
 
 	// 深层的 .. 只要在 home 内就收。
 	r.hc.ClearRuns()
-	if out := r.newOut("--cwd Projects/x/../y default api/n3"); len(r.hc.Runs) != 1 || r.hc.Runs[0].Opts.Cwd != filepath.Join(home, "Projects", "y") {
+	if out := r.newOut("Projects/x/../y"); len(r.hc.Runs) != 1 || r.hc.Runs[0].Opts.Cwd != filepath.Join(home, "Projects", "y") {
 		t.Fatalf("in-home .. rejected: runs=%+v out=%q", r.hc.Runs, out)
 	}
 
-	// 兄弟终端的目录沿用：在 home 内的沿用，落在 $HOME 的不学。
+	// 旧语法：目录承自兄弟终端——在 home 内的沿用，落在 $HOME 的不学。
 	r.hc.ClearRuns()
 	r.hc.Terminals["t1"]["foreground"] = map[string]any{"cwd": filepath.Join(home, "work")}
 	if out := r.newOut("default api/n4"); len(r.hc.Runs) != 1 || r.hc.Runs[0].Opts.Cwd != filepath.Join(home, "work") {
@@ -65,7 +64,7 @@ func TestNewCwdRules(t *testing.T) {
 	}
 	r.hc.ClearRuns()
 	r.hc.Terminals["t1"]["foreground"] = map[string]any{"cwd": home}
-	if out := r.newOut("default api/n5"); len(r.hc.Runs) != 0 || !containsAny(out, "cannot work in $HOME") {
+	if out := r.newOut("default api/n5"); len(r.hc.Runs) != 0 || !containsAny(out, "/new <folder>") {
 		t.Fatalf("sibling in $HOME must not be reused: runs=%+v out=%q", r.hc.Runs, out)
 	}
 }
@@ -115,7 +114,7 @@ func TestCleanEnded(t *testing.T) {
 
 	// 第一步 `/clean`：发确认卡 ( Yes / Cancel )，不动任何东西。
 	r.direct("/clean")
-	r.waitFor(t, "确认卡", func() bool { return r.countCalls("PostDialog") >= 1 })
+	r.waitFor(t, "确认卡", func() bool { return r.countCalls(callPostDialog) >= 1 })
 	if r.countCalls("DeleteRoom") != 0 {
 		t.Fatal("plan step must not delete anything")
 	}
@@ -182,7 +181,7 @@ func TestCleanEnded(t *testing.T) {
 		t.Fatal(werr)
 	}
 	r.direct("/clean")
-	r.waitFor(t, "又一张确认卡", func() bool { return r.countCalls("PostDialog") >= 2 })
+	r.waitFor(t, "又一张确认卡", func() bool { return r.countCalls(callPostDialog) >= 2 })
 	cancelRes, cancelErr := r.chat.Handlers.OnAction(r.click("2", "Cancel", ""))
 	if cancelErr != nil || !contains(cancelRes.Toast, "Cancelled") {
 		t.Fatalf("cancel: %v toast=%q", err, result.Toast)

@@ -71,6 +71,7 @@ func (a *App) cmdRun([]string) int {
 		return rel.Tag, err
 	}
 	e.History = cfg.History
+	e.DefaultSpace = cfg.Space
 	e.Inbox = filepath.Join(pl.StateDir, "inbox")
 	e.SetAsks(shared)
 	e.SetOwner = func(ownerID string) error {

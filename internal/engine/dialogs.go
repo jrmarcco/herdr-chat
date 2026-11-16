@@ -533,6 +533,11 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 		return answeredToast("Cancelled. Nothing was deleted."), nil
 	}
 
+	// /new 的开终端卡：同样不走终端——表单提交 ( 目录 + agent 下拉 ) 直接开。
+	if v.K == newKey {
+		return e.onNewCard(click, v)
+	}
+
 	shown, known := e.dialogAt(click.Message)
 	if !known {
 		shown = core.Dialog{Title: NeedsTitle, DoneTitle: DoneTitle}

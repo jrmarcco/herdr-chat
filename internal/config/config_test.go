@@ -293,3 +293,26 @@ func TestLoadEncryptPolicy(t *testing.T) {
 }
 
 func sameStrings(a, b []string) bool { return slices.Equal(a, b) }
+
+// HERDRCHAT_SPACE：/new 的默认 space 名；未设是 dev。
+func TestLoadSpace(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.env")
+	if err := os.WriteFile(file, []byte(keyBotToken+"=1:abc\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(file, nil, []string{keyBotToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Space != "dev" {
+		t.Fatalf("default space = %q, want dev", cfg.Space)
+	}
+	cfg, err = Load(file, map[string]string{"HERDRCHAT_SPACE": profileWork}, []string{keyBotToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Space != profileWork {
+		t.Fatalf("space = %q, want %s", cfg.Space, profileWork)
+	}
+}

@@ -49,6 +49,7 @@ In the profile's `config.env` (`herdrchat status` prints where it is):
 | `HERDR_SESSIONS` | `default` | the hc sessions to mirror, comma-separated; machines they reach come along. `default` is hc's own session, which with herdr-app reaches every session it shows |
 | `HERDR_MUTED_SPACES` | `all` | spaces whose rooms are quiet: only "needs you" and "done" ring; empty for none |
 | `HERDR_SILENT_SPACES` | (none) | spaces where nothing rings, not even "needs you" |
+| `HERDRCHAT_SPACE` | `dev` | the space name for terminals started from chat (`/new`) when they have no sibling to follow |
 | `HERDR_HISTORY` | `file,folded` | what a new room gets of the conversation before it: `file`, `folded`, both, or empty |
 | `FEISHU_APP_ID`, `FEISHU_APP_SECRET` | (required) | the Feishu app |
 | `FEISHU_OWNER_OPEN_ID` | (empty) | you; the bot tells you yours when you message it |
@@ -227,9 +228,12 @@ delivered (the terminal has ended) says so plainly.
 ## Commands
 
 - Direct chat: `/ls` (the overview again at the bottom of the chat; the old one is
-  recalled), `/new <session> <space>/<tab> [command]` (start one; default `claude`;
-  `--cwd <folder under your home>` first to pick its folder — a new terminal cannot
-  work in `$HOME` itself), `/kill <session> <address>`, `/clean` (clean up ended
+  recalled), `/new` (a card asks: the folder to work in — under your home, relative —
+  and the agent; one form, one submit), `/new <folder> [command]` (start one right
+  away; default `claude`, the folder's name names the tab, the space follows your
+  most recent terminal or `HERDRCHAT_SPACE`), `/new <session> <space>/<tab>
+  [command]` (name the place yourself; its folder comes from a sibling in that
+  space), `/kill <session> <address>`, `/clean` (clean up ended
   terminals' groups and stale screen files; it asks first), `/auth` (see below). Feishu can have a bot menu for `/ls`, help and `/auth` (set in the
   developer console:
   `skills/herdrchat/references/feishu.md`, "The bot menu").

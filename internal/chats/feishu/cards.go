@@ -275,13 +275,13 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 	}
 	if menu.Multi {
 		elements = append(elements, map[string]any{
-			kTag: "form", kName: "boxes",
+			kTag: kForm, kName: "boxes",
 			kElements: append(boxes, formSubmit("Next ⇥", withPick(value, "tab", ""), "next")),
 		})
 	}
 	if menu.Free != nil {
 		elements = append(elements, map[string]any{
-			kTag: "form", kName: "free",
+			kTag: kForm, kName: "free",
 			kElements: []any{
 				map[string]any{
 					kTag: "input", kName: "answer", "required": true,
@@ -301,7 +301,54 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 	}
 }
 
+// NewCard 是 /new 的开终端卡：一张表单带齐目录输入与 agent 下拉——
+// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走，就得同表单
+// ( core.Dialog.Select 的由来 )。
+func NewCard(title, markdown, placeholder, footer string, agents []string, value map[string]any) map[string]any {
+	if len(agents) == 0 {
+		agents = []string{"claude"}
+	}
+	var options []any
+	for _, a := range agents {
+		options = append(options, map[string]any{
+			kText:     map[string]any{kTag: kPlain, kContent: a},
+			kOptValue: a,
+		})
+	}
+	elements := []any{map[string]any{kTag: kMarkdown, kContent: markdown}}
+	elements = append(elements, map[string]any{
+		kTag: kForm, kName: "new",
+		kElements: []any{
+			map[string]any{
+				kTag: "input", kName: "answer", "required": true,
+				"placeholder": map[string]any{kTag: kPlain, kContent: placeholder},
+			},
+			map[string]any{
+				kTag: "select_static", kName: "agent",
+				// schema 2.0 的 select_static 不收 text 标签 ( 实测 200621 )；
+				// initial_option 是选项 value 的字符串。
+				"options":        options,
+				"initial_option": agents[0],
+			},
+			formSubmit("Start", withPick(value, "1", "start"), "start"),
+		},
+	})
+	elements = append(elements, buttonRow([]any{button("Esc (cancel)", withPick(value, pickEsc, ""), "danger_text")}))
+	elements = append(elements, footerElements(footer)...)
+	return map[string]any{
+		kSchema: kSchemaV,
+		kConfig: map[string]any{kUpdate: true},
+		kHeader: cardHeader(title, core.ToneNeeds),
+		kBody:   map[string]any{kElements: elements},
+	}
+}
+
 const pickEsc = "esc"
+
+const (
+	kForm     = "form"  // 表单元素
+	kOptValue = "value" // 下拉选项的取值
+)
 
 // formSubmit 是表单里带提交行为的按钮。
 func formSubmit(text string, value map[string]any, name string) map[string]any {

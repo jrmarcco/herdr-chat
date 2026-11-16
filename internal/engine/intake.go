@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jrmarcco/herdr-chat/internal/asks"
@@ -102,9 +103,13 @@ func (e *Engine) direct(where core.Where, text string) {
 	case "/ls":
 		e.refreshOverview(true)
 	case "/new":
-		reply(e.newTerminal(args))
+		if said := e.newTerminal(args, where); said != "" {
+			reply(said)
+		}
 	case "/clean":
-		reply(e.cleanEnded(args, where))
+		if said := e.cleanEnded(args, where); said != "" {
+			reply(said)
+		}
 	case "/kill":
 		if len(args) < 2 || !e.knownSession(args[0]) {
 			reply("give `/kill <session> <address>`")
@@ -128,7 +133,7 @@ func (e *Engine) direct(where core.Where, text string) {
 func (e *Engine) help() string {
 	lines := []string{
 		"`/ls` a new overview of every terminal (the overview also keeps itself up to date)",
-		"`/new <session> <space>/<tab> [command]` start a terminal (default `claude`); `--cwd <dir>` first to pick its folder",
+		"`/new` a card asks the folder and the agent; `/new <folder> [command]` starts one right away (default `claude`); `/new <session> <space>/<tab> [command]` names the place yourself",
 		"`/kill <session> <address>` end a terminal",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
 		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
@@ -136,78 +141,251 @@ func (e *Engine) help() string {
 	return strings.Join(lines, "\n")
 }
 
-// newTerminal：/new 起一个终端。
-// space 复用同 space 兄弟终端的 herdr.space 标签，没有就生成；
-// 登录 shell + exec，免得留下一个光壳 shell。
-// ( herdr-app 里的 tab 命名随 M7 的 nameTab 一起来。 )
-func (e *Engine) newTerminal(args []string) string {
-	cwd := ""
-	if len(args) > 0 && args[0] == "--cwd" {
-		if len(args) < 2 {
-			return "give `/new --cwd <dir> <session> <space>/<tab> [command]`"
-		}
-		cwd, args = args[1], args[2:]
-	}
-	if len(args) < 2 {
-		return "give `/new <session> <space>/<tab> [command]`"
-	}
+// newKey 是 /new 开终端卡的对话框 key ( onAction 据此拦截，不走终端 )。
+const newKey = "new-terminal"
 
-	session, place := args[0], args[1]
-	command := args[2:]
-	if !e.knownSession(session) {
-		return fmt.Sprintf("unknown session %q; known: %s", session, strings.Join(e.Sessions, ", "))
+// /new 可选的 agent 命令。
+const (
+	cmdClaude   = "claude"
+	cmdCodex    = "codex"
+	cmdOpencode = "opencode"
+)
+
+// agentCommands：reader 的 app 名 → 启动命令 ( /new 卡的下拉与提交校验共用 )。
+var agentCommands = map[string]string{
+	"claude-code": cmdClaude,
+	"codex":       cmdCodex,
+	"opencode":    cmdOpencode,
+}
+
+// agentOptions：开终端卡下拉里的命令，claude 永远在列 ( 兜底 )。
+func (e *Engine) agentOptions() []string {
+	out := []string{cmdClaude}
+	seen := map[string]bool{cmdClaude: true}
+	for _, app := range e.Readers.Apps() {
+		if cmd, ok := agentCommands[app]; ok && !seen[cmd] {
+			out = append(out, cmd)
+			seen[cmd] = true
+		}
 	}
+	return out
+}
+
+// startRequest：一次开终端请求的已解析形态。
+type startRequest struct {
+	session   string // "" → 第一个 session
+	space     string // space 名 ( "" → 最近终端的 space，没有则默认 )
+	tabName   string // "" → 目录名做 tab 名 ( 同 space 重名自动 -2 )
+	folder    string // home 下的相对路径 ( 用户输入 )
+	folderAbs string // 已解析的绝对路径 ( 兄弟终端承继时用 )
+	command   string // "" → claude
+}
+
+// newTerminal：/new 的三个入口。
+//
+//	裸 /new                        → 一张卡：目录输入 + agent 下拉，一次提交开终端；
+//	/new <folder> [command…]      → 默认 session、space/tab 自动 ( tab 名取目录名 )；
+//	/new <session> <space>/<tab> [command…]
+//	                              → 旧语法；--cwd 已移除，目录承自同 space 兄弟终端。
+//
+// ( 登录 shell + exec，免得留下一个光壳 shell。 )
+func (e *Engine) newTerminal(args []string, where core.Where) string {
+	if len(args) == 0 {
+		return e.newTerminalCard(where)
+	}
+	if len(args) >= 2 && e.knownSession(args[0]) && strings.Contains(args[1], "/") {
+		return e.newTerminalNamed(args)
+	}
+	msg, _ := e.startTerminal(startRequest{folder: args[0], command: strings.Join(args[1:], " ")})
+	return msg
+}
+
+// onNewCard：/new 卡的提交。目录输入与 agent 下拉同一张表单，一次带齐；
+// 校验失败只回 toast ( 卡留着、输入还在，改一下再提交 )。
+func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionResult, error) {
+	if v.Pick == pickEsc {
+		return answeredToast("Cancelled. Nothing was started."), nil
+	}
+	folder := strings.TrimSpace(click.Answer)
+	if folder == "" {
+		return core.ActionResult{Toast: "Type the folder first."}, nil
+	}
+	command := cmdClaude
+	if agent := click.Form["agent"]; slices.Contains(e.agentOptions(), agent) {
+		command = agent
+	}
+	msg, ok := e.startTerminal(startRequest{folder: folder, command: command})
+	if !ok {
+		return core.ActionResult{Toast: msg}, nil
+	}
+	return core.ActionResult{
+		Toast: "✔ " + msg,
+		Card:  &core.Look{Title: DoneTitle, Tone: core.ToneDone, Markdown: msg},
+	}, nil
+}
+
+// newTerminalCard：/new 的开终端卡——目录输入与 agent 下拉同在一张表单：
+// 按钮点击不携带输入内容、只有表单提交带，两者要一次带走就得同表单。
+func (e *Engine) newTerminalCard(where core.Where) string {
+	dialog := core.Dialog{
+		Title:     "🆕 New terminal",
+		Markdown:  "Which folder should it work in? Under your home, relative (`Projects/foo`).",
+		DoneTitle: DoneTitle,
+		Menu: &core.Menu{
+			Key:  newKey,
+			Free: &core.MenuOption{N: 1, Label: "Working folder, e.g. Projects/foo"},
+		},
+		Select: &core.Select{Label: "Agent", Options: e.agentOptions()},
+	}
+	if _, err := e.Chat.PostDialog(e.ctx, where.Room, dialog, map[string]any{"k": newKey}); err != nil {
+		xlog.For("engine").Warn("new 卡发送失败", "error", err)
+		return "Not sent: " + hccli.PlainError(err) + "\n`/new <folder> [command]` starts one without the card."
+	}
+	return "" // 卡已发，不再回文字
+}
+
+// newTerminalNamed：旧语法——session 与 space/tab 点名。
+func (e *Engine) newTerminalNamed(args []string) string {
+	session, place := args[0], args[1]
+	req := startRequest{session: session, command: strings.Join(args[2:], " ")}
 	slash := strings.Index(place, "/")
 	if slash < 1 || slash == len(place)-1 {
 		return "give the place as <space>/<tab>"
 	}
-	space, tab := place[:slash], place[slash+1:]
-	spaceID := "sp" + randHex()
+	req.space, req.tabName = place[:slash], place[slash+1:]
 
-	// 工作目录只认 $HOME 之下的相对路径：$HOME 本身太宽 ( 一个终端会把整个
-	// home 当仓库，agent 的信任确认也因此每次都来 )，越出 $HOME 的相对路径
-	// ( ../ ) 同样不收。
+	// 目录承自同 space 的兄弟终端 ( --cwd 已移除；只承 home 之内的 )。
 	home := e.homeDirOr()
-	folder := ""
-	if cwd != "" {
-		if strings.HasPrefix(cwd, "/") || strings.HasPrefix(cwd, "~") {
-			return "give `--cwd` a folder under your home (relative), not `" + cwd + "`"
-		}
-		folder = filepath.Join(home, cwd)
-	}
-
-	// 同 space 的兄弟终端：沿用它的 space id 与工作目录 ( 在 $HOME 之内的才沿
-	// 用；老终端落在 $HOME 的不学 )。
 	if v := e.viewOf(session); v != nil {
 		for _, t := range v.All() {
-			if s, _, ok := hccli.SplitWhere(t.Where()); ok && s == space && t.Label("herdr.space") != "" {
-				spaceID = t.Label("herdr.space")
-				if folder == "" {
-					if fg, _ := t["foreground"].(map[string]any); fg != nil {
-						if c, _ := fg["cwd"].(string); c != "" && c != home && strings.HasPrefix(c, home+string(filepath.Separator)) {
-							folder = c
-						}
+			if s, _, ok := hccli.SplitWhere(t.Where()); ok && s == req.space {
+				if fg, _ := t["foreground"].(map[string]any); fg != nil {
+					if c, _ := fg["cwd"].(string); c != "" && c != home && strings.HasPrefix(c, home+string(filepath.Separator)) {
+						req.folderAbs = c
 					}
 				}
 				break
 			}
 		}
 	}
-	if folder == "" || folder == home || !strings.HasPrefix(folder, home+string(filepath.Separator)) {
-		return "give `--cwd <folder under your home>`: a new terminal cannot work in $HOME itself"
+	if req.folderAbs == "" {
+		return fmt.Sprintf("no terminal in space %q to take a folder from; `/new <folder>` starts one (it asks)", req.space)
 	}
-	line := "claude"
-	if len(command) > 0 {
-		line = strings.Join(command, " ")
+	msg, _ := e.startTerminal(req)
+	return msg
+}
+
+// startTerminal：解析默认值并开终端，返回 ( 说给用户的话, 是否开成了 )。
+func (e *Engine) startTerminal(req startRequest) (string, bool) {
+	session := req.session
+	if session == "" {
+		if len(e.Sessions) > 0 {
+			session = e.Sessions[0]
+		} else {
+			session = "default"
+		}
 	}
-	tabID := "tb" + randHex()
-	out, err := e.HC.RunTerminal(e.ctx, session, hccliRunOpts(folder, spaceID, tabID, space, tab, line))
+	// 工作目录只认 $HOME 之下的相对路径：$HOME 本身太宽 ( 一个终端会把整个
+	// home 当仓库，agent 的信任确认也因此每次都来 )，越出 $HOME 的相对路径
+	// ( ../ ) 同样不收。
+	folder := req.folderAbs
+	if folder == "" {
+		abs, err := e.resolveFolder(req.folder)
+		if err != nil {
+			return err.Error(), false
+		}
+		folder = abs
+	}
+
+	// space 与 space id：点名的 space 找兄弟；没点名就跟最近起的那台同一个，
+	// 再没有就用默认 ( HERDRCHAT_SPACE )。
+	space, spaceID := req.space, ""
+	if v := e.viewOf(session); v != nil {
+		newest := ""
+		for _, t := range v.All() {
+			s, _, ok := hccli.SplitWhere(t.Where())
+			if !ok || t.Label("herdr.space") == "" {
+				continue
+			}
+			if req.space != "" {
+				// 点名的 space：它的兄弟给出 space id。
+				if s == req.space {
+					space, spaceID = s, t.Label("herdr.space")
+					break
+				}
+				continue
+			}
+			// 没点名：跟最近起的那台同一个 space。
+			created := fmt.Sprint(t["created_ms"])
+			if newest == "" || created > newest {
+				newest = created
+				space, spaceID = s, t.Label("herdr.space")
+			}
+		}
+	}
+	if space == "" {
+		space = e.spaceDefault()
+	}
+	if spaceID == "" {
+		spaceID = "sp" + randHex()
+	}
+	tabName := req.tabName
+	if tabName == "" {
+		tabName = e.freeTabName(space, filepath.Base(strings.TrimRight(req.folder, "/")))
+	}
+	line := req.command
+	if line == "" {
+		line = cmdClaude
+	}
+	out, err := e.HC.RunTerminal(e.ctx, session, hccliRunOpts(folder, spaceID, "tb"+randHex(), space, tabName, line))
 	if err != nil {
-		return "Not started: " + hccli.PlainError(err)
+		return "Not started: " + hccli.PlainError(err), false
 	}
-	address := addressOfRun(out)
 	return fmt.Sprintf("Started `%s` as `%s` in %s / %s / %s (`%s`). Its %s appears in a moment.",
-		line, address, session, space, tab, folder, e.Chat.RoomWord())
+		line, addressOfRun(out), session, space, tabName, folder, e.Chat.RoomWord()), true
+}
+
+// resolveFolder：home 下的相对路径 → 绝对路径；越界的拒绝。
+func (e *Engine) resolveFolder(rel string) (string, error) {
+	if strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "~") {
+		return "", fmt.Errorf("give a folder under your home (relative), not `%s`", rel)
+	}
+	home := e.homeDirOr()
+	folder := filepath.Join(home, rel)
+	if folder == home || !strings.HasPrefix(folder, home+string(filepath.Separator)) {
+		return "", fmt.Errorf("`%s` is not a folder under your home: a terminal cannot work in $HOME itself", rel)
+	}
+	return folder, nil
+}
+
+// spaceDefault：/new 的默认 space 名 ( HERDRCHAT_SPACE；未注入时 dev )。
+func (e *Engine) spaceDefault() string {
+	if e.DefaultSpace != "" {
+		return e.DefaultSpace
+	}
+	return "dev"
+}
+
+// freeTabName：目录名做 tab 名；同 space 已有同名 tab 就 -2、-3 排下去。
+func (e *Engine) freeTabName(space, base string) string {
+	if base == "" || base == "." || base == "/" {
+		base = "term"
+	}
+	taken := map[string]bool{}
+	for _, session := range e.Sessions {
+		if v := e.viewOf(session); v != nil {
+			for _, t := range v.All() {
+				if s, tab, ok := hccli.SplitWhere(t.Where()); ok && s == space {
+					taken[tab] = true
+				}
+			}
+		}
+	}
+	name := base
+	for i := 2; taken[name]; i++ {
+		name = fmt.Sprintf("%s-%d", base, i)
+	}
+	return name
 }
 
 func hccliRunOpts(folder, spaceID, tabID, space, tab, line string) hccli.RunOpts {

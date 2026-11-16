@@ -249,6 +249,9 @@ func OnOff(value string, fallback bool) bool {
 // DefaultSession 是 hc 自己的 session，空的 HERDR_SESSIONS 即指它。
 const DefaultSession = "default"
 
+// defaultSpace 是 HERDRCHAT_SPACE 未设时 /new 用的 space 名。
+const defaultSpace = "dev"
+
 // Config 是一次运行需要的全部，来自 config.env 与环境变量。
 type Config struct {
 	Profile     string
@@ -269,6 +272,8 @@ type Config struct {
 	BotTags           bool
 	UserTags          bool
 	History           map[string]bool
+	// Space 是聊天里 /new 开终端的默认 space 名 ( 无兄弟终端可承继时 )。
+	Space string
 }
 
 // Load 把 config.env 与环境变量合并 ( 环境变量优先，同 shell )，
@@ -331,6 +336,7 @@ func Load(file string, env map[string]string, requires []string) (Config, error)
 		EncryptKey:        merged["FEISHU_ENCRYPT_KEY"],
 		VerificationToken: merged["FEISHU_VERIFICATION_TOKEN"],
 		Muted:             SpacesOf(muted, true, "all"),
+		Space:             orDefault(merged["HERDRCHAT_SPACE"], defaultSpace),
 		Silent:            SpacesOf(silent, true, ""),
 		BotTags:           OnOff(merged["HERDR_BOT_TAGS"], true),
 		UserTags:          OnOff(merged["HERDR_USER_TAGS"], true),

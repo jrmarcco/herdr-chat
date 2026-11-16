@@ -24,4 +24,8 @@ const (
 	callEdit    = "EditCard"
 	optNo       = "No"
 	sessDefault = "default"
+
+	callPostDialog = "PostDialog"
+	keyCwd         = "cwd"
+	valPick        = "pick"
 )

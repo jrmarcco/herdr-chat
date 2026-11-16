@@ -348,3 +348,27 @@ func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
 		t.Fatalf("handled = %v, want all three", handled)
 	}
 }
+
+// /new 的开终端卡：目录输入与 agent 下拉同一张表单 ( 按钮点击不带输入，
+// 表单提交才带 )，Start 一次带齐两者；Esc 在表单外。
+func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
+	card := NewCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "",
+		[]string{"claude", "codex"}, map[string]any{"k": "new-terminal"})
+	body, _ := card[kBody].(map[string]any)
+	elements, _ := body[kElements].([]any)
+	form, _ := elements[1].(map[string]any)
+	if form[kTag] != "form" {
+		t.Fatalf("second element = %v, want the form", form)
+	}
+	raw, _ := json.Marshal(card)
+	s := string(raw)
+	for _, want := range []string{
+		`"name":"answer"`, `"select_static"`, `"name":"agent"`,
+		`"value":"codex"`, `"initial_option":"claude"`,
+		`"form_action_type":"submit"`, `"esc"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no %s in card", want)
+		}
+	}
+}
