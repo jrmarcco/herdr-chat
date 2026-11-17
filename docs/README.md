@@ -112,7 +112,8 @@ Coming from the npm (Node) version? Stop the old one, put this binary where the
 | type | goes into the terminal |
 | send an image | placed on its machine, its path typed in beside your words |
 | `/commands` | the slash commands this agent really has here (tap to send) |
-| `/screen` `/answer <text>` `/enter` `/esc` | the screen / type as-is / press enter / press esc |
+| `/screen` `/answer <text>` `/enter` `/esc` `/trust` | the screen / type as-is / press enter / press esc / answer claude's folder-trust question |
+| auto-trust from `/new` | the first message in a new folder is no longer blocked: naming the folder in `/new` counts as trusting it, and the bot answers the question |
 | `/history` | the conversation so far (a file and a folded post) |
 | card buttons | answer its questions (multi-select, free text, Esc) |
 

@@ -28,6 +28,7 @@ const (
 	callPostDialog = "PostDialog"
 	keyCwd         = "cwd"
 	valPick        = "pick"
+	keyEnter       = "enter"
 
 	fieldAgent    = "agent"    // /new 卡的下拉字段
 	fieldSession  = "session"  // /new 卡的下拉字段

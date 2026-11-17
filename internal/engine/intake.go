@@ -149,7 +149,7 @@ func (e *Engine) help() string {
 		"`/kill` a card picks the terminal to end (or `/kill <session> <address>` by name)",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
 		"`/sessions` the sessions on this machine; `/sessions add|drop <name>` what the bot follows (it starts again to apply)",
-		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
+		fmt.Sprintf("In a terminal's %s: type to talk to it; `/commands` (what it can do here), `/screen`, `/answer <text>`, `/enter`, `/esc`, `/trust` (claude 的目录信任确认), `/history` (the conversation so far, as a file).", e.Chat.RoomWord()),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -590,8 +590,10 @@ func (e *Engine) startTerminal(req startRequest) (string, bool) {
 	if err != nil {
 		return "Not started: " + hccli.PlainError(err), false
 	}
+	address := addressOfRun(out)
+	e.autoTrust(session, address, folder, line)
 	return fmt.Sprintf("Started `%s` as `%s` in %s / %s / %s (`%s`). Its %s appears in a moment.",
-		line, addressOfRun(out), session, space, tabName, folder, e.Chat.RoomWord()), true
+		line, address, session, space, tabName, folder, e.Chat.RoomWord()), true
 }
 
 // resolveFolder home 下的相对路径 → 绝对路径；越界的拒绝。
@@ -674,6 +676,8 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 	switch text {
 	case "/commands":
 		return e.onCommands(session, record)
+	case "/trust":
+		return e.onTrust(where, session, address)
 	case "/history":
 		room, has := e.read().Chats[k]
 		if reader == nil || !has {
@@ -749,7 +753,7 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 	// 把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
 	if !force {
 		if screen := e.screen(session, address, ScreenLines); screenWaitsConfirm(screen) {
-			_, err := e.Chat.Reply(e.ctx, where, "It waits on its own confirm (trust this folder?) — nothing was typed, so it stays put. Answer it in herdr-app: the ❯ marks the choice, Enter confirms, Esc cancels (and ends it).\n\n```\n"+hccli.TidyScreen(screen, DialogLines)+"\n```")
+			_, err := e.Chat.Reply(e.ctx, where, "It waits on its own confirm (trust this folder?) — nothing was typed, so it stays put. Reply `/trust` to answer Yes here, or answer it in herdr-app: the ❯ marks the choice, Enter confirms, Esc cancels (and ends it).\n\n```\n"+hccli.TidyScreen(screen, DialogLines)+"\n```")
 			return err
 		}
 	}

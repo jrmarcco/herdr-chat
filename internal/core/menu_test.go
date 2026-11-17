@@ -340,3 +340,36 @@ func TestNumberedMenuWinsOverSynthesis(t *testing.T) {
 		t.Fatalf("menu = %+v, want the numbered one without keys", m)
 	}
 }
+
+// claude 的文件夹信任确认屏：给出走到 Yes 并确认的按键；别的屏一律不认。
+
+const keyPressEnter = "enter"
+
+func TestTrustAnswerKeys(t *testing.T) {
+	safety := " Quick safety check: Is this a project you created or one that you trust?\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel"
+	keys, ok := TrustAnswerKeys(safety)
+	if !ok || len(keys) != 2 || keys[0] != "down" || keys[1] != keyPressEnter {
+		t.Fatalf("keys = %v %v, want down+enter", keys, ok)
+	}
+	files := " Do you trust the files in this folder?\n\n ❯ No, exit\n   Yes, I trust the files in this folder\n\n Enter to confirm · Esc to cancel"
+	if keys, ok := TrustAnswerKeys(files); !ok || len(keys) != 2 {
+		t.Fatalf("alt phrasing: %v %v", keys, ok)
+	}
+	// 光标已在 Yes 上：只按 enter。
+	cursored := " Do you trust the files in this folder?\n\n   No, exit\n ❯ Yes, I trust the files in this folder\n\n Enter to confirm · Esc to cancel"
+	if keys, ok := TrustAnswerKeys(cursored); !ok || len(keys) != 1 || keys[0] != keyPressEnter {
+		t.Fatalf("cursored yes: %v %v", keys, ok)
+	}
+	// 别的屏：普通确认、菜单、空闲提示符——绝不认。
+	for name, screen := range map[string]string{
+		"notice":    " We're changing auto mode.\n\n Enter to continue · Esc to cancel",
+		"menu":      " Proceed?\n 1. Yes\n 2. No\n\n Esc to cancel",
+		"prompt":    " ❯ ",
+		"no yes":    " Is this a project you created or one that you trust?\n\n ❯ No, exit\n   Exit anyway\n\n Enter to confirm",
+		"no cursor": " Is this a project you created or one that you trust?\n\n   No, exit\n   Yes, I trust this folder\n\n Enter to confirm",
+	} {
+		if keys, ok := TrustAnswerKeys(screen); ok {
+			t.Fatalf("%s: recognized as %v, want none", name, keys)
+		}
+	}
+}

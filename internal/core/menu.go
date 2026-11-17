@@ -223,6 +223,46 @@ func ConfirmMenuOf(screenText string) *Menu {
 	}
 }
 
+// claude 的文件夹信任确认屏：问句、Yes 选项行与光标行。
+var (
+	trustAskRe  = regexp.MustCompile(`(?i)is this a project (?:you created|or one that you trust)|do you trust`)
+	trustYesRe  = regexp.MustCompile(`(?im)^\s*(?:[❯›]\s*)?yes\b[^\n]*trust`)
+	trustLineRe = regexp.MustCompile(`(?m)^\s*[❯›]\s*\S`)
+)
+
+// TrustAnswerKeys：屏幕若是 claude 的文件夹信任确认 ( ❯ 停在 No, exit 上、
+// Yes … trust 在选项里 )，给出把光标走到 Yes 再确认的按键序列；
+// 不是这个屏、或认不出选项，返回 false——绝不盲按。
+func TrustAnswerKeys(screen string) ([]string, bool) {
+	if !trustAskRe.MatchString(screen) {
+		return nil, false
+	}
+	lines := strings.Split(screen, "\n")
+	cursor, yes := -1, -1
+	for i, l := range lines {
+		if cursor < 0 && trustLineRe.MatchString(l) {
+			cursor = i
+		}
+		if yes < 0 && trustYesRe.MatchString(l) {
+			yes = i
+		}
+	}
+	if cursor < 0 || yes < 0 {
+		return nil, false
+	}
+	var keys []string
+	for moves := yes - cursor; moves != 0; {
+		if moves > 0 {
+			keys = append(keys, "down")
+			moves--
+			continue
+		}
+		keys = append(keys, "up")
+		moves++
+	}
+	return append(keys, "enter"), true
+}
+
 // MenuWithConfirm：一屏的菜单。编号菜单优先；
 // 没有编号、但屏幕自己声明了 Enter/Esc 两条路的，合成转述按钮。
 func MenuWithConfirm(screenText string) *Menu {

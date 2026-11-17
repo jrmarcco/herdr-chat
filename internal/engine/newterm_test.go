@@ -3,6 +3,7 @@ package engine
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jrmarcco/herdr-chat/internal/core"
 	"github.com/jrmarcco/herdr-chat/internal/fake"
@@ -48,7 +49,7 @@ func TestNewCardSubmitStartsTheTerminal(t *testing.T) {
 	r := harness(t)
 	// 下拉里的 agent 来自已装的 reader：再装一个 codex，选它。
 	codex := fake.NewFakeReader()
-	codex.AppName = "codex"
+	codex.AppName = cmdCodex
 	if err := r.e.Readers.Register(codex); err != nil {
 		t.Fatal(err)
 	}
@@ -274,5 +275,40 @@ func TestNewCardPlaceField(t *testing.T) {
 	})
 	if err != nil || !strings.Contains(result.Toast, "<space>/<tab>") || result.Card != nil {
 		t.Fatalf("bad place: %v %+v", err, result)
+	}
+}
+
+// /new 起跑后的自动代答：claude 在新目录停在信任确认上——替你选 Yes；
+// 别的 agent 不出手。
+func TestAutoTrustAnswersClaudesFolderQuestion(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+	r.hc.SetScreen("t99", trustScreen) // 起跑即停在信任确认 ( RunTerminal 的假地址是 t99 )
+
+	if _, ok := r.e.startTerminal(startRequest{folder: folderFoo}); !ok {
+		t.Fatal("startTerminal failed")
+	}
+	r.waitFor(t, "代答按键", func() bool {
+		for _, k := range r.hc.KeysPressed() {
+			if k.Address == "t99" && len(k.Keys) == 2 && k.Keys[0] == "down" && k.Keys[1] == keyEnter {
+				return true
+			}
+		}
+		return false
+	})
+
+	// codex 起跑：信任屏在也不代答。
+	r.hc.ClearKeysPressed()
+	r.hc.SetScreen("t99", trustScreen)
+	if _, ok := r.e.startTerminal(startRequest{folder: folderFoo, command: "codex"}); !ok {
+		t.Fatal("startTerminal (codex) failed")
+	}
+
+	// 给 lane 一点时间证明它没出手。
+	time.Sleep(100 * time.Millisecond)
+	for _, k := range r.hc.KeysPressed() {
+		if k.Address == "t99" {
+			t.Fatalf("codex must not be auto-answered: %+v", k)
+		}
 	}
 }

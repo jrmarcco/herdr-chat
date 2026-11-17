@@ -22,6 +22,11 @@ const (
 	msgM9     = "m9"
 )
 
+const (
+	whereTrust = "api / trust"
+	roomT9     = "room-t9"
+)
+
 const trustScreen = " Accessing workspace:\n\n /home/x\n\n Quick safety check: Is this a project you created or one that you trust?\n\n Claude Code'll be able to read, edit, and execute files here.\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm · Esc to cancel\n"
 
 func TestNothingTypedIntoAWaitingConfirm(t *testing.T) {
@@ -36,13 +41,13 @@ func TestNothingTypedIntoAWaitingConfirm(t *testing.T) {
 
 	// 房间先注册进 state ( onMessage 按房间反查终端 )。
 	st, _ := r.store.Read()
-	st.Chats["default|t9"] = state.Room{Chat: "room-t9", Name: "api / trust", Session: sessDefault, Tab: tabTrust}
+	st.Chats["default|t9"] = state.Room{Chat: roomT9, Name: whereTrust, Session: sessDefault, Tab: tabTrust}
 	if err := r.store.Write(st); err != nil {
 		t.Fatal(err)
 	}
 	r.hc.SetScreen(termTrust, trustScreen)
 	r.chat.Handlers.OnMessage(core.Incoming{
-		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: msgM9},
+		Room: core.Room(roomT9), Where: core.Where{Room: core.Room(roomT9), Message: msgM9},
 		Message: msgM9, Text: "hi",
 	})
 
@@ -66,7 +71,7 @@ func TestNothingTypedIntoAWaitingConfirm(t *testing.T) {
 	// 正常空闲屏幕 ( 光标行是空的 )：照发。
 	r.hc.SetScreen(termTrust, "❯\n\n  ⏸ manual mode on")
 	r.chat.Handlers.OnMessage(core.Incoming{
-		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: "m10"},
+		Room: core.Room(roomT9), Where: core.Where{Room: core.Room(roomT9), Message: "m10"},
 		Message: "m10", Text: "hello",
 	})
 	r.waitFor(t, "正常送达", func() bool {
@@ -129,14 +134,14 @@ func TestEnterPressesEnterAndNothingElse(t *testing.T) {
 		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: tabTrust},
 	})
 	st, _ := r.store.Read()
-	st.Chats["default|t9"] = state.Room{Chat: "room-t9", Name: "api / trust", Session: sessDefault, Tab: tabTrust}
+	st.Chats["default|t9"] = state.Room{Chat: roomT9, Name: whereTrust, Session: sessDefault, Tab: tabTrust}
 	if err := r.store.Write(st); err != nil {
 		t.Fatal(err)
 	}
 	r.hc.SetScreen(termTrust, trustScreen)
 
 	r.chat.Handlers.OnMessage(core.Incoming{
-		Room: core.Room("room-t9"), Where: core.Where{Room: core.Room("room-t9"), Message: msgM9},
+		Room: core.Room(roomT9), Where: core.Where{Room: core.Room(roomT9), Message: msgM9},
 		Message: msgM9, Text: "/enter",
 	})
 
@@ -166,6 +171,71 @@ func TestEnterPressesEnterAndNothingElse(t *testing.T) {
 	for _, sent := range r.hc.Sents() {
 		if sent.Address == termTrust {
 			t.Fatalf("/enter must not type text: %+v", sent)
+		}
+	}
+}
+
+// /trust：认出 claude 的信任确认屏即代答 ( 走到 Yes 再 Enter )；
+// 屏上没有信任问题时如实回屏、不按键。
+func TestTrustCommandAnswersTheFolderQuestion(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+
+	r.hc.Change(sessDefault, "created", termTrust, map[string]any{
+		keyAddress: termTrust, keyState: stateLive,
+		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: tabTrust},
+	})
+	st, _ := r.store.Read()
+	st.Chats["default|t9"] = state.Room{Chat: roomT9, Name: whereTrust, Session: sessDefault, Tab: tabTrust}
+	if err := r.store.Write(st); err != nil {
+		t.Fatal(err)
+	}
+	r.hc.SetScreen(termTrust, trustScreen)
+
+	r.chat.Handlers.OnMessage(core.Incoming{
+		Room: core.Room(roomT9), Where: core.Where{Room: core.Room(roomT9), Message: msgM9},
+		Message: msgM9, Text: "/trust",
+	})
+	r.waitFor(t, "Trusted 回复", func() bool {
+		for _, c := range r.chat.Calls() {
+			if c.Name == callReply && len(c.Args) >= 2 {
+				if md, _ := c.Args[1].(string); strings.Contains(md, "Trusted.") {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	pressed := false
+	for _, k := range r.hc.KeysPressed() {
+		if k.Address == termTrust && len(k.Keys) == 2 && k.Keys[0] == "down" && k.Keys[1] == keyEnter {
+			pressed = true
+		}
+	}
+	if !pressed {
+		t.Fatalf("trust keys not pressed: %+v", r.hc.KeysPressed())
+	}
+
+	// 屏上没有信任问题：不按键，回屏说明。
+	r.hc.ClearKeysPressed()
+	r.hc.SetScreen(termTrust, " ❯ ")
+	r.chat.Handlers.OnMessage(core.Incoming{
+		Room: core.Room(roomT9), Where: core.Where{Room: core.Room(roomT9), Message: msgM9},
+		Message: msgM9, Text: "/trust",
+	})
+	r.waitFor(t, "无信任问题的回复", func() bool {
+		for _, c := range r.chat.Calls() {
+			if c.Name == callReply && len(c.Args) >= 2 {
+				if md, _ := c.Args[1].(string); strings.Contains(md, "No folder-trust question") {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	for _, k := range r.hc.KeysPressed() {
+		if k.Address == termTrust {
+			t.Fatalf("nothing should be pressed without the question: %+v", k)
 		}
 	}
 }
