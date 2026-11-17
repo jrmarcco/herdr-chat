@@ -39,7 +39,7 @@ What it does:
   an old card can never answer a newer dialog;
 - **Input both ways**: typing in a group goes into the terminal; images are placed on the
   terminal's machine with `hc put` and their path typed in beside your words;
-- **Overview and commands**: `/ls`, `/new`, `/kill`, `/clean` in the direct chat;
+- **Overview and commands**: `/ls`, `/new`, `/kill`, `/sessions`, `/clean` in the direct chat;
 - **A footer under each post**: `claude · claude-opus-5-5 · main · context 23% (234k) ·
   5-hour 2% · 7-day 57%` — harness, model, branch, context and account limits, gathered by
   herdrchat itself at no model cost;
@@ -159,15 +159,15 @@ The bot itself tells the owner when a new release is out (it never self-upgrades
         └──────────────────┬──────────────────────────┘
              the chats.Chat contract (internal/chats/chat.go)
                   ⇅
-        ┌─────────────────────────────────────────────┐
-        │ internal/engine (the orchestration)          │
-        │  rooms      a room per tab, its lifecycle    │
-        │  posting    the pipeline, live cards         │
-        │  dialogs    three answer paths, stale-proof  │
-        │  intake     what you typed, hook answers     │
-        │  overview   one card, edited in place        │
-        │  · one serial lane per terminal              │
-        └──┬──────────┬──────────────┬───────────────┘
+        ┌───────────────────────────────────────────────────────┐
+        │ internal/engine (the orchestration)                    │
+        │  rooms      a room per tab, its lifecycle              │
+        │  posting    the pipeline, live cards                   │
+        │  dialogs    three answer paths, stale-proof            │
+        │  intake     input, hook answers, /new & /kill cards    │
+        │  overview   one card, edited in place                  │
+        │  · one serial lane per terminal                        │
+        └──┬──────────┬──────────────┬─────────────────────────┘
    the readers.Reader contract │       │ the HC contract (core.HC)
       ┌───────────────┤              ├─────────────────┐
       ⇅               ⇅              ⇅                 ⇅
@@ -214,15 +214,15 @@ for the `internal/fake` trio and run every behaviour without a socket.
 
 ### Code index
 
-One Go module, ~22k lines; the only runtime dependency is the official Feishu SDK
+One Go module, ~25k lines; the only runtime dependency is the official Feishu SDK
 (`github.com/larksuite/oapi-sdk-go/v3`).
 
 | Path | What it is | Key files |
 |---|---|---|
 | `cmd/herdrchat/` | process-level entry: assembles the CLI, ignores SIGPIPE, logs panics | `main.go` |
 | `internal/cli/` | every subcommand; all seams injected (env/home/TTY/clock/HC/service) so tests never touch the real machine | `cli.go` (dispatch+usage), `run.go` (the bot wiring), `setup.go`, `update.go`, `start.go`, `install.go`, `status.go`, `logs.go`, `pair.go`, `initcmd.go`, `hookscmd.go` |
-| `internal/engine/` | the engine: the same for every chat app and agent | `engine.go`, `rooms.go`, `posting.go`, `dialogs.go`, `intake.go`, `overview.go`, `pairing.go`, `commands.go`, `clean.go`, `update.go` |
-| `internal/core/` | pure types and algorithms | `types.go`, `errors.go` (error taxonomy), `lanes.go`, `cursor.go`, `menu.go` (screen-menu parsing), `views.go` (multi-view topology), `meter.go`, `hc.go` (the HC contract) |
+| `internal/engine/` | the engine: the same for every chat app and agent | `engine.go`, `rooms.go`, `posting.go`, `dialogs.go`, `intake.go` (input, and the /new, /kill, /sessions commands), `overview.go`, `pairing.go`, `commands.go`, `clean.go`, `update.go` |
+| `internal/core/` | pure types and algorithms | `types.go`, `errors.go` (error taxonomy), `lanes.go`, `cursor.go`, `menu.go` (screen-menu parsing, Enter/Esc confirm synthesis), `views.go` (multi-view topology), `meter.go`, `hc.go` (the HC contract) |
 | `internal/chats/` | the chat-app seam | `chat.go` |
 | `internal/chats/feishu/` | Feishu: larkws, cards, API calls, /auth | `chat.go`, `cards.go`, `sdk.go`, `userauth.go` |
 | `internal/readers/` | the agent seam + registry | `reader.go` |
@@ -235,7 +235,7 @@ One Go module, ~22k lines; the only runtime dependency is the official Feishu SD
 | `internal/service/` | launchd/systemd user service; env whitelist | `service.go`, `templates.go` (embeds the plist/unit skeletons in `templates/`) |
 | `internal/config/` | profile placement (XDG/HERDRCHAT_HOME), config.env parsing and line-wise edits | — |
 | `internal/state/` | state.json, schema-compatible shapes, atomic writes, corrupt-file backup | — |
-| `internal/cliversion/` | the one version variable goreleaser stamps via `-X` | — |
+| `internal/cliversion/` | the one version variable goreleaser stamps via `-X`, plus dot-version ordering (pre-releases and pseudo-versions count as older) | — |
 | `internal/xlog/` | one-line logs, daily files, 14 kept, TTY colors | `handler.go`, `daily.go` |
 | `internal/fake/` | the test trio: FakeChat / FakeHC / FakeReader | — |
 | `testdata/screens/` | 28 real screen captures locking `menu.go` down (new captures join the golden test) | — |
@@ -244,7 +244,8 @@ One Go module, ~22k lines; the only runtime dependency is the official Feishu SD
 | `.goreleaser.yaml` + `.github/workflows/` | the release path: tag `v*` → CI (vet+race) → goreleaser, four platforms (what `herdrchat update` downloads) | — |
 
 Everyday commands: `make lint` (the CI-blocking tier), `make lint-strict` (report-only),
-`go test -race ./...` (15 packages green is the bar to merge).
+`go test -race ./...` (17 packages green is the bar to merge); to release: `make tag-patch|tag-minor|tag-major`
+(bump from the newest tag and push; `make tags` / `make untag` to list / to undo).
 
 ### Extending
 
