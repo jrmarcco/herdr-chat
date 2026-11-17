@@ -349,10 +349,10 @@ func TestTheFirstMessageOfAChatIsHandled(t *testing.T) {
 	}
 }
 
-// /new 的开终端卡：目录输入与 agent 下拉同一张表单 ( 按钮点击不带输入，表单提交才带 )，
+// 表单卡 (/new)：目录输入与 agent 下拉同一张表单 ( 按钮点击不带输入，表单提交才带 )，
 // Start 一次带齐两者；Esc 在表单外。
-func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
-	card := NewCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "", "",
+func TestFormCardAsksFolderAndAgentInOneForm(t *testing.T) {
+	card := FormCard("🆕 New terminal", "Which folder?", "Working folder, e.g. Projects/foo", "Where: <space>/<tab>", "", "",
 		[]core.Select{{Name: "agent", Options: []core.SelectOption{
 			{Label: "claude", Value: "claude"}, {Label: "codex", Value: "codex"},
 		}}}, map[string]any{"k": "new-terminal"})
@@ -376,8 +376,8 @@ func TestNewCardAsksFolderAndAgentInOneForm(t *testing.T) {
 }
 
 // 无输入诉求的表单卡 ( /kill )：不带输入框必填的空输入框会拦住提交。
-func TestNewCardWithoutInputOmitsIt(t *testing.T) {
-	card := NewCard("End a terminal", "Which one?", "", "", "End",
+func TestFormCardWithoutInputOmitsIt(t *testing.T) {
+	card := FormCard("End a terminal", "Which one?", "", "", "", "End",
 		[]core.Select{{Name: "terminal", Options: []core.SelectOption{{Label: "dev / jit (t25)", Value: "default|t25"}}}},
 		map[string]any{"k": "kill-terminal"})
 	raw, _ := json.Marshal(card)

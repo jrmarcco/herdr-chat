@@ -287,8 +287,8 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 			kTag: kForm, kName: "free",
 			kElements: []any{
 				map[string]any{
-					kTag: "input", kName: "answer", "required": true,
-					"placeholder": map[string]any{kTag: kPlain, kContent: menu.Free.Label},
+					kTag: kInput, kName: "answer", "required": true,
+					kPlaceholder: map[string]any{kTag: kPlain, kContent: menu.Free.Label},
 				},
 				formSubmit("Send", withPick(value, fmt.Sprint(menu.Free.N), menu.Free.Label), "send"),
 			},
@@ -305,10 +305,11 @@ func MenuCard(title, markdown string, menu *core.Menu, value map[string]any, foo
 	}
 }
 
-// NewCard 是 /new 的开终端卡：
-// 一张表单带齐目录输入与 agent 下拉按钮点击不携带输入内容，只有表单提交带；
-// 要输入+选择一次带走，就得同表单 ( core.Dialog.Select 的由来 )。
-func NewCard(title, markdown, placeholder, footer, submit string, selects []core.Select, value map[string]any) map[string]any {
+// FormCard 是表单卡：可选的输入框 ( 必填 answer、可选 place ) 与若干下拉
+// ( core.Selects ) 同在一张表单，提交按钮一次带齐——按钮点击不携带输入内容，
+// 只有表单提交带，要输入+选择一次带走就得同表单 ( core.Dialog.Select 的由来 )。
+// 与 PlainCard / MenuCard / DoneCard 同族：种类 + Card。
+func FormCard(title, markdown, placeholder, place, footer, submit string, selects []core.Select, value map[string]any) map[string]any {
 	if submit == "" {
 		submit = "Start"
 	}
@@ -316,8 +317,15 @@ func NewCard(title, markdown, placeholder, footer, submit string, selects []core
 	var fields []any
 	if placeholder != "" {
 		fields = append(fields, map[string]any{
-			kTag: "input", kName: "answer", "required": true,
-			"placeholder": map[string]any{kTag: kPlain, kContent: placeholder},
+			kTag: kInput, kName: "answer", "required": true,
+			kPlaceholder: map[string]any{kTag: kPlain, kContent: placeholder},
+		})
+	}
+	// place 是可选的第二输入框 ( 不填走默认 )，绝不 required ，否则空着会拦住整个表单的提交。
+	if place != "" {
+		fields = append(fields, map[string]any{
+			kTag: kInput, kName: "place",
+			kPlaceholder: map[string]any{kTag: kPlain, kContent: place},
 		})
 	}
 	for _, sel := range selects {
@@ -361,8 +369,10 @@ func NewCard(title, markdown, placeholder, footer, submit string, selects []core
 const pickEsc = "esc"
 
 const (
-	kForm     = "form"  // 表单元素
-	kOptValue = "value" // 下拉选项的取值
+	kForm        = "form"        // 表单元素
+	kOptValue    = "value"       // 下拉选项的取值
+	kInput       = "input"       // 输入框
+	kPlaceholder = "placeholder" // 输入框的占位提示
 )
 
 // formSubmit 是表单里带提交行为的按钮。

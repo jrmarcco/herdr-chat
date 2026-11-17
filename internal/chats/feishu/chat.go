@@ -859,7 +859,7 @@ func (c *Chat) PostDialog(ctx context.Context, room core.Room, d core.Dialog, v 
 		if d.Menu.Free != nil {
 			placeholder = d.Menu.Free.Label
 		}
-		cardJSON = NewCard(d.Title, d.Markdown, placeholder, d.Footer, d.Submit, d.Selects, value)
+		cardJSON = FormCard(d.Title, d.Markdown, placeholder, d.Place, d.Footer, d.Submit, d.Selects, value)
 	case d.Menu != nil:
 		cardJSON = MenuCard(d.Title, d.Markdown, d.Menu, value, d.Footer)
 	default:

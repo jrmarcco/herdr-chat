@@ -205,3 +205,74 @@ func TestNewOldSyntaxInheritsTheFolder(t *testing.T) {
 		return false
 	})
 }
+
+// place 点名的两个命令形态与卡上的 place 输入。
+
+// folderFoo / agentClaude 是这两个测试文件反复用的字面量。
+const (
+	folderFoo   = "Projects/foo"
+	agentClaude = cmdClaude
+)
+
+func TestNewWithAnExplicitPlace(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+
+	// /new <folder> <space>/<tab>：session 默认。
+	r.direct("/new Projects/foo work/jit9")
+	r.waitFor(t, "place 形态开终端", func() bool { return len(r.hc.RunsOf()) == 1 })
+	_, opts := r.lastRun()
+	if opts["where"] != "work / jit9" {
+		t.Fatalf("where = %q, want work / jit9", opts["where"])
+	}
+
+	// /new <folder> <session> <space>/<tab> [command]：完整形态。
+	r.direct("/new Projects/bar default dev/full codex")
+	r.waitFor(t, "完整形态", func() bool { return len(r.hc.RunsOf()) == 2 })
+	_, opts = r.lastRun()
+	if opts["where"] != "dev / full" || !strings.Contains(opts["argv"], "codex") {
+		t.Fatalf("where=%q argv=%q", opts["where"], opts["argv"])
+	}
+
+	// place 形状不对：如实报错、一个也不开。
+	r.direct("/new Projects/baz dev/")
+	for _, run := range r.hc.RunsOf() {
+		if strings.Contains(run.Opts.Cwd, "baz") {
+			t.Fatal("a malformed place must start nothing")
+		}
+	}
+}
+
+// 卡上填 place：去处照填；填坏只回 toast，卡不动。
+func TestNewCardPlaceField(t *testing.T) {
+	r := harness(t)
+	r.start(t)
+	r.direct("/new")
+	r.waitFor(t, "开终端卡", func() bool { return r.countCalls(callPostDialog) == 1 })
+
+	result, err := r.chat.Handlers.OnAction(core.Click{
+		Value:  map[string]any{"k": newKey, valPick: "1"},
+		Form:   map[string]string{"agent": agentClaude, "place": "work / from-card"},
+		Answer: folderFoo,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Toast, "✔ Started") {
+		t.Fatalf("toast = %q", result.Toast)
+	}
+	_, opts := r.lastRun()
+	if opts["where"] != "work / from-card" {
+		t.Fatalf("where = %q, want the card's place", opts["where"])
+	}
+
+	// 坏 place：toast 报错，不起终端。
+	result, err = r.chat.Handlers.OnAction(core.Click{
+		Value:  map[string]any{"k": newKey, valPick: "1"},
+		Form:   map[string]string{"agent": agentClaude, "place": "no-slash"},
+		Answer: folderFoo,
+	})
+	if err != nil || !strings.Contains(result.Toast, "<space>/<tab>") || result.Card != nil {
+		t.Fatalf("bad place: %v %+v", err, result)
+	}
+}

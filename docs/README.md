@@ -101,7 +101,7 @@ Coming from the npm (Node) version? Stop the old one, put this binary where the
 | Direct chat (with the bot) | Does |
 |---|---|
 | `/ls` | the overview again (every terminal, what waits for you, links) |
-| `/new`, `/new <folder> [command]` | start a terminal: bare `/new` sends a card (folder input + agent dropdown, plus a session dropdown when several are followed); a folder starts one right away (default `claude`, the folder's name names the tab); `/new <session> <space>/<tab> [command]` still works |
+| `/new`, `/new <folder> [<session>] [<space>/<tab>] [command]` | start a terminal: bare `/new` sends a card (folder input + an optional place + agent/session dropdowns); a folder starts one right away (default `claude`; the place defaults to your most recent space and the folder's name); spaces around the `/` are fine; `/new <session> <space>/<tab> [command]` still works |
 | `/kill`, `/kill <session> <address>` | end a terminal: bare `/kill` sends a card to pick one (groups' names); or name it yourself |
 | `/clean` | clean up ended terminals' groups and stale files (asks first) |
 | `/sessions`, `/sessions add/drop <name>` | the hc sessions on this machine, and which the bot follows (saved and applied by a restart; no core is created from chat) |
@@ -189,7 +189,7 @@ Node version, so both versions can hand over in place.
 
 ### Two plugin seams
 
-- **Chat apps** (the `Chat` interface in `internal/chats/chat.go`, 29 members): the engine
+- **Chat apps** (the `Chat` interface in `internal/chats/chat.go`, 34 members): the engine
   treats every app the same; what only an app has (Feishu's tenant tags, avatars, acting as
   you) stays in its own package. The core never imports an app; an app never imports the
   engine.

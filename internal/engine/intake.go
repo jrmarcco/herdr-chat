@@ -145,7 +145,7 @@ func (e *Engine) direct(where core.Where, text string) {
 func (e *Engine) help() string {
 	lines := []string{
 		"`/ls` a new overview of every terminal (the overview also keeps itself up to date)",
-		"`/new` a card asks the folder and the agent; `/new <folder> [command]` starts one right away (default `claude`); `/new <session> <space>/<tab> [command]` names the place yourself",
+		"`/new` a card asks the folder, the place (`<space>/<tab>`, optional) and the agent; `/new <folder> [<session>] [<space>/<tab>] [command]` starts one right away (default `claude`; the place and everything after it can be left out)",
 		"`/kill` a card picks the terminal to end (or `/kill <session> <address>` by name)",
 		"`/clean` clean up ended terminals' groups and stale screen files (asks first)",
 		"`/sessions` the sessions on this machine; `/sessions add|drop <name>` what the bot follows (it starts again to apply)",
@@ -369,8 +369,33 @@ func (e *Engine) newTerminal(args []string, where core.Where) string {
 	if len(args) >= 2 && e.knownSession(args[0]) && strings.Contains(args[1], "/") {
 		return e.newTerminalNamed(args)
 	}
-	msg, _ := e.startTerminal(startRequest{folder: args[0], command: strings.Join(args[1:], " ")})
+	// 目录之后：是已知 session 的 token 收作 session，带 / 的收作去处，
+	// 其余全是命令 /new <folder> [<session>] [<space>/<tab>] [command] 一套语法通吃。
+	req := startRequest{folder: args[0]}
+	rest := args[1:]
+	if len(rest) > 0 && e.knownSession(rest[0]) {
+		req.session, rest = rest[0], rest[1:]
+	}
+	if len(rest) > 0 && strings.Contains(rest[0], "/") {
+		space, tab, err := splitPlace(rest[0])
+		if err != nil {
+			return err.Error()
+		}
+		req.space, req.tabName, rest = space, tab, rest[1:]
+	}
+	req.command = strings.Join(rest, " ")
+	msg, _ := e.startTerminal(req)
 	return msg
+}
+
+// splitPlace 拆一个 "<space>/<tab>"；两头都得有字，
+// 两侧空格收掉 ( 卡上照着显示的样子打 "dev / jit" 是常态 )。
+func splitPlace(place string) (space, tab string, err error) {
+	slash := strings.Index(place, "/")
+	if slash < 1 || slash == len(place)-1 {
+		return "", "", fmt.Errorf("give the place as <space>/<tab>, not `%s`", place)
+	}
+	return strings.TrimSpace(place[:slash]), strings.TrimSpace(place[slash+1:]), nil
 }
 
 // firstSession：跟随的第一个 session ( 单 session 卡面点名用 )。
@@ -417,6 +442,14 @@ func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionRes
 		command = agent
 	}
 	req := startRequest{folder: folder, command: command}
+	if place := strings.TrimSpace(click.Form["place"]); place != "" {
+		space, tab, err := splitPlace(place)
+		if err != nil {
+			//nolint:nilerr // 已如实告知，不进重试——卡不动：输入还在。
+			return core.ActionResult{Toast: err.Error()}, nil
+		}
+		req.space, req.tabName = space, tab
+	}
 	if session := click.Form["session"]; session != "" {
 		if !e.knownSession(session) {
 			return core.ActionResult{Toast: "unknown session " + session + "; known: " + strings.Join(e.Sessions, ", ")}, nil
@@ -449,6 +482,7 @@ func (e *Engine) newTerminalCard(where core.Where) string {
 			Key:  newKey,
 			Free: &core.MenuOption{N: 1, Label: "Working folder, e.g. Projects/foo"},
 		},
+		Place:   "Where to show it: <space>/<tab> — empty keeps the default",
 		Selects: e.newCardSelects(),
 	}
 	if _, err := e.Chat.PostDialog(e.ctx, where.Room, dialog, map[string]any{"k": newKey}); err != nil {
@@ -464,11 +498,10 @@ func (e *Engine) newTerminalCard(where core.Where) string {
 func (e *Engine) newTerminalNamed(args []string) string {
 	session, place := args[0], args[1]
 	req := startRequest{session: session, command: strings.Join(args[2:], " ")}
-	slash := strings.Index(place, "/")
-	if slash < 1 || slash == len(place)-1 {
-		return "give the place as <space>/<tab>"
+	var err error
+	if req.space, req.tabName, err = splitPlace(place); err != nil {
+		return err.Error()
 	}
-	req.space, req.tabName = place[:slash], place[slash+1:]
 
 	// 目录承自同 space 的兄弟终端 ( --cwd 已移除；只承 home 之内的 )。
 	home := e.homeDirOr()

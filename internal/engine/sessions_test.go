@@ -186,8 +186,8 @@ func TestNewCardSessionDropdown(t *testing.T) {
 	result, err := r.chat.Handlers.OnAction(core.Click{
 		Value:   map[string]any{"k": newKey, valPick: "1"},
 		Message: directMsg,
-		Answer:  "Projects/foo",
-		Form:    map[string]string{fieldAgent: "claude", "session": sessWork},
+		Answer:  folderFoo,
+		Form:    map[string]string{fieldAgent: agentClaude, "session": sessWork},
 	})
 	if err != nil || !strings.Contains(result.Toast, "✔") {
 		t.Fatalf("submit: %v %+v", err, result)
@@ -202,7 +202,7 @@ func TestNewCardSessionDropdown(t *testing.T) {
 	result, err = r.chat.Handlers.OnAction(core.Click{
 		Value:   map[string]any{"k": newKey, valPick: "1"},
 		Message: directMsg,
-		Answer:  "Projects/foo",
+		Answer:  folderFoo,
 		Form:    map[string]string{"session": "elsewhere"},
 	})
 	if err != nil || !strings.Contains(result.Toast, "unknown session") {

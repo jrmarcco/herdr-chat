@@ -89,7 +89,7 @@ herdrchat setup     # 交互式：校验密钥 → 选 session → 启动 → 6 
 | 直聊（与 bot 私聊） | 作用 |
 |---|---|
 | `/ls` | 刷新总览（每个终端的状态、谁在等你、群链接） |
-| `/new`、`/new <目录> [命令]` | 开一个终端：裸 `/new` 出卡片填目录、选 agent（多 session 时还有 session 下拉）；给目录则直达（默认 `claude`，tab 名取目录名）；旧语法 `/new <session> <space>/<tab> [命令]` 仍可用 |
+| `/new`、`/new <目录> [<session>] [<space>/<tab>] [命令]` | 开一个终端：裸 `/new` 出卡片（目录 + 可选去处 + agent/session 下拉）；给目录则直达（默认 `claude`，去处默认取最近 space 与目录名）；点名去处用 `<space>/<tab>`（两侧空格随意）；旧语法 `/new <session> <space>/<tab> [命令]` 仍可用 |
 | `/kill`、`/kill <session> <地址>` | 结束一个终端：裸 `/kill` 出卡选（显示房间名）；点名直达 |
 | `/clean` | 清理已结束终端的群与陈旧文件（先出预览卡，确认才删） |
 | `/sessions`、`/sessions add/drop <name>` | 本机 hc session 一览 / 调整 bot 的跟随范围（写入设置并重启生效；不从聊天里造 core） |
@@ -182,7 +182,7 @@ Code / Codex 的设置 → agent 提问时把请求落进 `~/.local/state/herdrc
 
 ### 两条插件缝
 
-- **聊天平台缝**（`internal/chats/chat.go` 的 `Chat` 接口，29 个成员）：engine 对每个平台
+- **聊天平台缝**（`internal/chats/chat.go` 的 `Chat` 接口，34 个成员）：engine 对每个平台
   一视同仁；平台一切私有能力（飞书的租户标签、头像、以你行事）都留在自己的包里。
   core/engine 永不 import 平台，平台也永不 import engine。
 - **agent 缝**（`internal/readers/reader.go` 的 `Reader` 接口 + 可选能力小接口：对话框/

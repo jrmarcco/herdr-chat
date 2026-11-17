@@ -71,15 +71,21 @@ type Menu struct {
 
 // Dialog 是终端在等什么：有菜单就带菜单、周围的话，以及卡片关闭时说的话。
 type Dialog struct {
-	Menu      *Menu
+	Menu *Menu
+
 	Title     string
 	Markdown  string
 	DoneTitle string
 	Footer    string
+
 	// Selects 可选：
 	// 与 Free 同一张表单里的下拉 ( /new 选 agent、session 这类 ) 按钮点击不携带输入内容，
 	// 只有表单提交带；要输入+选择一次带走就得同表单。
 	Selects []Select
+	// Place 可选：第二个输入框 ( 表单字段 "place"，不填即走默认 ) 的占位文本，
+	// /new 用它点名 <space>/<tab>；空 = 没有这个框。
+	Place string
+
 	// Submit 可选：表单提交按钮的动词 ( 空 = "Start"；/kill 用 "End" )。
 	Submit string
 }

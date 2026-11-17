@@ -349,7 +349,7 @@ func TestDirectCommands(t *testing.T) {
 	r.waitFor(t, "帮助文本", func() bool {
 		for _, c := range r.chat.Calls() {
 			if c.Name == callReply && len(c.Args) >= 2 {
-				if md, _ := c.Args[1].(string); strings.Contains(md, "/new <session>") {
+				if md, _ := c.Args[1].(string); strings.Contains(md, "/new <folder> [<session>] [<space>/<tab>]") {
 					return true
 				}
 			}

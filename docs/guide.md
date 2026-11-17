@@ -229,10 +229,11 @@ delivered (the terminal has ended) says so plainly.
 
 - Direct chat: `/ls` (the overview again at the bottom of the chat; the old one is
   recalled), `/new` (a card asks: the folder to work in — under your home, relative —
-  the agent — and, when several sessions are followed, the session —; one form, one
-  submit), `/new <folder> [command]` (start one right
-  away; default `claude`, the folder's name names the tab, the space follows your
-  most recent terminal or `HERDRCHAT_SPACE`), `/new <session> <space>/<tab>
+  its place `<space>/<tab>`, optional — the agent — and, when several sessions are
+  followed, the session —; one form, one submit), `/new <folder> [<session>]
+  [<space>/<tab>] [command]` (start one right away; default `claude`; the place,
+  when left out, follows your most recent space — or `HERDRCHAT_SPACE` — and the
+  folder's name; spaces around the `/` are fine), `/new <session> <space>/<tab>
   [command]` (name the place yourself; its folder comes from a sibling in that
   space), `/sessions` (the hc sessions on this machine, which the bot follows, and each
   core's state; `/sessions add|drop <name>` changes what it follows — saved, then the
