@@ -330,7 +330,7 @@ func machineOfAddr(address string) string {
 	return ""
 }
 
-// Dialog：Codex 现在问的是什么——hook 的请求优先，其次日志里的提问；
+// Dialog Codex 现在问的是什么，hook 的请求优先，其次日志里的提问；
 // 都没有返回 nil；
 // Plan 的题还没画出来也返回 nil ( 等它画 )。
 func (r *Reader) Dialog(ctx context.Context, session, address string) (*core.AgentDialog, error) {
@@ -395,7 +395,7 @@ func terminalState(term map[string]any) string {
 
 const stateBlockedWord = "blocked"
 
-// Answer：回答一张卡——异步提问发那条消息；Plan 的题按数字键；其余走 hook。
+// Answer 回答一张卡，异步提问发那条消息；Plan 的题按数字键；其余走 hook。
 func (r *Reader) Answer(ctx context.Context, session, address string, shown core.AgentDialog, reply core.Reply) (bool, error) {
 	if shown.Idle {
 		return r.answerLater(ctx, session, address, shown, reply)

@@ -10,7 +10,7 @@
 //
 // HERDRCHAT_HOME 则把一个 profile 放进你指定的一个目录：
 // config.env 与 state/ 都在其中。
-// 当目录不是惯常位置时，profile id 会带上一个短标签 —— 在别的目录里试验的安装，
+// 当目录不是惯常位置时，profile id 会带上一个短标签，在别的目录里试验的安装，
 // 永远不会停掉、替换或删除正式实例的服务与 hc 终端。
 package config
 

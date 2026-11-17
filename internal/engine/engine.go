@@ -21,8 +21,9 @@ import (
 // 引擎：编排房间、发帖、入口与总览，把 hc 的事件流接到聊天侧。
 //
 // 并发规则：
-// 一个终端 key 一条串行 lane —— 它对房间、游标、卡片的一切按序发生，不同终端互不等待；
-// 所有 session 的首个事件快照与首次 cores 读取完成之前，不派发任何 lane，远端机器的终端才能始终由同一个 session 认领。
+// 一个终端 key 一条串行 lane，它对房间、游标、卡片的一切按序发生，不同终端互不等待；
+// 所有 session 的首个事件快照与首次 cores 读取完成之前，不派发任何 lane，
+// 远端机器的终端才能始终由同一个 session 认领。
 // 定时器与等待的节拍。测试用 Quick 把等待压到毫秒级。
 
 const (
@@ -91,8 +92,8 @@ type Engine struct {
 	// ( 装配处注入：退出，由服务或终端循环拉起 )。
 	Restart func()
 
-	// ManualTimers 不起 live/sweep/asks 定时器，测试自己 tick —— Quick 模式下 10ms 的定时器与断言抢时序，
-	// 是旧测试抖动的根 ( 测试用 )。
+	// ManualTimers 不起 live/sweep/asks 定时器，测试自己 tick。
+	// Quick 模式下 10ms 的定时器与断言抢时序，是旧测试抖动的根 ( 测试用 )。
 	ManualTimers bool
 
 	// Quick 把重试退避、终答等待与定时器间隔压到毫秒级 ( 测试用 )。
@@ -479,7 +480,7 @@ func (e *Engine) onChange(session string, ev hccli.ChangeEvent) {
 	record := ev.Record
 	roomIfShown := func() {
 		// snapshot / created|restarted|labels|status|title 且带 where 标签 → ensureRoom。
-		// /new 的终端带着标签出生，没有后续 labels事件 —— created 与 status 不触发的话，房间永远等不来。
+		// /new 的终端带着标签出生，没有后续 labels事件，created 与 status 不触发的话，房间永远等不来。
 		if whereShown(record) {
 			r := record
 			e.later(session, ev.Address, "room", func() error {
@@ -587,7 +588,7 @@ func (e *Engine) onTurn(session string, ev hccli.TurnEvent) {
 			e.postTurn(session, ev.Address, record, reader)
 			e.markDone(e.keyOf(session, ev.Address), 0)
 			// turn 到头：它开着的提问卡不再有人等，收掉。
-			// 不依赖 hc 的 status 事件 —— "离开 blocked"那条事件并不总会来，
+			// 不依赖 hc 的 status 事件，"离开 blocked" 那条事件并不总会来，
 			// turn 的 done 是确定性的收口点。
 			e.closeCard(e.keyOf(session, ev.Address), DoneTitle)
 			return nil
@@ -717,7 +718,7 @@ func (e *Engine) sweep(session string) {
 	}
 }
 
-// SetAsks 换掉引擎用的 asks 实例——与 readers 共享同一个
+// SetAsks 换掉引擎用的 asks 实例与 readers 共享同一个
 // ( partial 与 finished 的记忆必须是一份 )。
 func (e *Engine) SetAsks(a *asks.Asks) { e.asks = a }
 
@@ -730,7 +731,7 @@ func (e *Engine) onAction(click core.Click) (core.ActionResult, error) {
 }
 
 // onAsk：agent 的 hook 问/答了 ( 终端 herdrchat.ask 标签的出现与消失，通路 A )。
-// 标签出现——无论状态如何 ( Codex 不显示提示、一边干活一边等 ) —— 立刻发卡；
+// 标签出现，无论状态如何 ( Codex 不显示提示、一边干活一边等 ) 立刻发卡；
 // 消失说明 hook 结束 ( 聊天里答的、终端里答的、或超时 )，关卡，终端还在等的再读屏发新卡。
 func (e *Engine) onAsk(session, address string, record hccli.Terminal) {
 	k := e.keyOf(session, address)

@@ -537,7 +537,7 @@ func (c *Chat) onCardAction(data map[string]any) map[string]any {
 	}
 	res := map[string]any{kToast: map[string]any{kType: "info", kContent: out.Toast}}
 
-	// 回调响应里的新卡是唯一能换掉按钮/表单的通道 ( PATCH 只能改展示内容， // 交互组件动不了——飞书文档明说 )。
+	// 回调响应里的新卡是唯一能换掉按钮/表单的通道 ( PATCH 只能改展示内容， // 交互组件动不了，飞书文档明说 )。
 	// 原地刷新与关卡都靠它。
 	if out.Card != nil {
 		res["card"] = PlainCard(out.Card.Markdown, out.Card.Title, out.Card.Tone, out.Card.Footer)
@@ -561,6 +561,7 @@ func (c *Chat) asYou() bool {
 		return allowed
 	}
 	c.mu.Unlock()
+
 	checkCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	allowed, err := c.userAuth.Allowed(checkCtx)
 	cancel()
@@ -572,11 +573,13 @@ func (c *Chat) asYou() bool {
 		c.mu.Lock()
 		return c.youAllowed
 	}
+
 	c.mu.Lock()
 	was := c.youAllowed
 	c.youAllowed = allowed
 	c.youChecked = time.Now()
 	c.mu.Unlock()
+
 	if allowed && !was {
 		xlog.For("feishu").Info("以你行事：开")
 	} else if !allowed && was {

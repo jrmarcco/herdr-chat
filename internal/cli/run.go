@@ -26,7 +26,7 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// run 前台跑引擎，把真实的 hc、三个 reader 与飞书接在一起 —— 这就是bot 本体。
+// run 前台跑引擎，把真实的 hc、三个 reader 与飞书接在一起，这就是bot 本体。
 // `herdrchat start` 的服务与 hc 终端循环跑的也是它。
 func (a *App) cmdRun([]string) int {
 	pl, cfg, ok := a.ready()
@@ -111,8 +111,8 @@ func (a *App) cmdRun([]string) int {
 	}
 
 	// 心跳文件两行：
-	// 启动时刻与 pid——mtime 是"还活着"的心跳 ( 分钟级 touch )，
-	// pid 给 `herdrchat update` 用 ( SIGTERM 这个进程，hc 终端里的循环 3 秒后 // 拉起新二进制 )。
+	// 启动时刻与 pid，mtime 是 "还活着" 的心跳 ( 分钟级 touch )，
+	// pid 给 `herdrchat update` 用 ( SIGTERM 这个进程，hc 终端里的循环 3 秒后拉起新二进制 )。
 	beat := time.NewTicker(time.Minute)
 	defer beat.Stop()
 

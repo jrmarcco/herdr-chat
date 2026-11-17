@@ -7,8 +7,9 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/hccli"
 )
 
-// start 先停干净 ( 双 bot 双答 )，再按安装形态起——有服务走服务，
-// 没有就在第一个 session 的一个 hc 终端里放个循环；然后等日志说连上了。
+// start 先停干净 ( 双 bot 双答 )，再按安装形态起。
+// 有服务走服务，没有就在第一个 session 的一个 hc 终端里放个循环；
+// 然后等日志说连上了。
 func (a *App) cmdStart([]string) int {
 	pl, cfg, ok := a.ready()
 	if !ok {

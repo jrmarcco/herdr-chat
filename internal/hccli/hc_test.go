@@ -198,7 +198,7 @@ func TestEventsFollowSnapshotTurnAndDedupe(t *testing.T) {
 }
 
 // removed 事件的回调带着摘掉之前的记录 ( 盖印 finished )：
-// postEnd 说遗言还要用它——nil 记录连地址都没有。
+// postEnd 说遗言还要用它，nil 记录连地址都没有。
 func TestARemovedEventCarriesItsRecord(t *testing.T) {
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "hc")
@@ -345,8 +345,8 @@ func TestEventsQuietWatchdogKillsStuckChild(t *testing.T) {
 			tick = time.After(2 * time.Second)
 		}
 		// 复活过的证据：view 被第二次快照刷新过 ( stub 每次启动都发同一快照，
-		// 重启计数拿不到；用进程存在性+完成信号都不够直接——这里改为：看
-		// stub 是否被再次拉起 )。
+		// 重启计数拿不到；用进程存在性+完成信号都不够直接，这里改为：
+		// 看stub 是否被再次拉起 )。
 		if runs := spawnCount(t, filepath.Join(dir, "hc.runs")); runs >= 2 {
 			cancel()
 			return

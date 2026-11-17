@@ -9,8 +9,8 @@ import (
 )
 
 // 新版提示：
-// 起跑后问一次、之后每天问一次；有更新的版本且这个版本没提示过，就给 owner 一张卡——只提示，
-// 不自己升级 ( `herdrchat update` 才动二进制 )。
+// 起跑后问一次、之后每天问一次；有更新的版本且这个版本没提示过，就给 owner 一张卡，
+// 只提示，不自己升级 ( `herdrchat update` 才动二进制 )。
 const updateEvery = 24 * time.Hour
 
 // startUpdateWatch 起跑 30 秒后问第一次 ( 刚起连日志都还没写完 )，

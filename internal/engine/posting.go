@@ -17,13 +17,13 @@ import (
 // 发帖管线。
 
 // deliver 一次发帖带重试；
-// 仍失败则抛出且游标不动，同样的内容随下一帖一起发出去——重复可接受，丢失不可。
+// 仍失败则抛出且游标不动，同样的内容随下一帖一起发出去，重复可接受，丢失不可。
 func (e *Engine) deliver(session string, record hccli.Terminal, send func(core.Room) (core.Message, error)) (core.Message, error) {
 	for attempt := 1; ; attempt++ {
 		room, err := e.ensureRoom(session, record)
 		if err == nil && room == "" {
-			// 没有错也没有房间：这个终端不该有房间 ( 未在 herdr-app 展示、
-			// 或 tab 还被旧终端占着 )——重试改变不了它，立刻按无事收场。
+			// 没有错也没有房间：这个终端不该有房间 ( 未在 herdr-app 展示、或 tab 还被旧终端占着 )，
+			// 重试改变不了它，立刻按无事收场。
 			return "", nil
 		}
 		if err == nil && room != "" {
@@ -43,7 +43,7 @@ func (e *Engine) deliver(session string, record hccli.Terminal, send func(core.R
 	}
 }
 
-// postTo deliver 的最常用形态——把一段文本发进终端的房间。
+// postTo deliver 的最常用形态，把一段文本发进终端的房间。
 func (e *Engine) postTo(session string, record hccli.Terminal, text, footer string) (core.Message, error) {
 	return e.deliver(session, record, func(room core.Room) (core.Message, error) {
 		return e.Chat.Post(e.ctx, room, text, footer)
@@ -442,7 +442,7 @@ func foregroundCwd(record hccli.Terminal) string {
 
 func shellQ(s string) string { return "'" + strings.ReplaceAll(s, "'", `'''`) + "'" }
 
-// footerFor 帖子下面那行小字 —— harness、模型 ( 或 screen )、分支、上下文、限额 ( reader 自报的补上 )；
+// footerFor 帖子下面那行小字：harness、模型 ( 或 screen )、分支、上下文、限额 ( reader 自报的补上 )；
 // 不知道的一律略去。
 func (e *Engine) footerFor(session string, record hccli.Terminal, app string, meta map[string]any) string {
 	short := app

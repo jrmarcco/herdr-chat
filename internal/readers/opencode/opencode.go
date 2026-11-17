@@ -1,7 +1,7 @@
 // Package opencode 是 OpenCode 的 reader ( hc status app "opencode" )，
 // 走它自己的API：
 // CLI `opencode api <operation>` 问的是 OpenCode 的后台服务，它自己登录。
-// 这里不读它的数据库、不读它的屏——OpenCode 升级只要 API 还在，这就还能用。
+// 这里不读它的数据库、不读它的屏，OpenCode 升级只要 API 还在，这就还能用。
 //
 //	哪个会话：
 //	该终端目录下的会话 ( session.list )，活跃的 ( session.active ) 优先，否则更新最近的。

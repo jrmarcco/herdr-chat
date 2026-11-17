@@ -28,7 +28,7 @@ var answerRe = regexp.MustCompile(`^/answer\s+([\s\S]+)$`)
 // Press enter to continue、↑/↓ Navigate · enter Confirm )。
 var waitHintRe = regexp.MustCompile(`(?i)enter[^\n]{0,40}(confirm|continue)|navigate[^\n]{0,20}enter`)
 
-// cursorSelects：光标 ( ❯ › > ) 选中了一个非空选项——空闲提示符的光标行是空的，不会命中。
+// cursorSelects：光标 ( ❯ › > ) 选中了一个非空选项，空闲提示符的光标行是空的，不会命中。
 var cursorSelectsRe = regexp.MustCompile(`(?m)^\s*[❯›>]\s*\S`)
 
 // screenWaitsConfirm 屏幕上有一个等确认的对话框 ( 信任确认这类，hc 不报 blocked 的 )。
@@ -89,7 +89,7 @@ func (e *Engine) onMessage(in core.Incoming) {
 	})
 }
 
-// direct：直聊的命令。
+// direct 直聊的命令。
 func (e *Engine) direct(where core.Where, text string) {
 	cmd, rest, _ := strings.Cut(strings.TrimSpace(text), " ")
 	var args []string
@@ -141,7 +141,7 @@ func (e *Engine) direct(where core.Where, text string) {
 	}
 }
 
-// help：直聊的帮助文本。
+// help 直聊的帮助文本。
 func (e *Engine) help() string {
 	lines := []string{
 		"`/ls` a new overview of every terminal (the overview also keeps itself up to date)",
@@ -157,8 +157,10 @@ func (e *Engine) help() string {
 // killKey 是 /kill 终端卡的对话框 key ( onAction 据此拦截，不走终端 )。
 const killKey = "kill-terminal"
 
-// killTerminalCard：裸 /kill 的终端卡——下拉点名要结束的终端 ( 显示房间名，
-// 值回传 session|address )，提交即结束。/kill 与文字形态一样不做二次确认：
+// killTerminalCard 裸 /kill 的终端卡下拉点名要结束的终端 ( 显示房间名，值回传 session|address )，
+// 提交即结束。
+//
+// /kill 与文字形态一样不做二次确认：
 // 选择 + Kill 两个动作已比打字郑重，且终端随时 /new 再起。
 func (e *Engine) killTerminalCard(where core.Where) string {
 	var options []core.SelectOption
@@ -194,8 +196,8 @@ func (e *Engine) killTerminalCard(where core.Where) string {
 	return "" // 卡已发，不再回文字
 }
 
-// onKillCard：/kill 卡的提交。值是 session|address；终端可能已结束 ( 卡躺了一阵 )，
-// 如实告知。
+// onKillCard /kill 卡的提交。
+// 值是 session|address；终端可能已结束 ( 卡躺了一阵 )，如实告知。
 func (e *Engine) onKillCard(click core.Click) (core.ActionResult, error) {
 	v := valueOf(click)
 	if v.Pick == pickEsc {
@@ -219,7 +221,7 @@ func (e *Engine) onKillCard(click core.Click) (core.ActionResult, error) {
 	}, nil
 }
 
-// sessionsCmd：/sessions —— 本机 hc session 一览与跟随范围。
+// sessionsCmd /sessions 本机 hc session 一览与跟随范围。
 // 聊天只管 bot 的视野：add 纳入一个本机已存在的 session，drop 移出；
 // 造 core 属于 CLI/技能包的事，这里不做。
 func (e *Engine) sessionsCmd(args []string) string {
@@ -232,7 +234,7 @@ func (e *Engine) sessionsCmd(args []string) string {
 	return e.sessionFollow(args[1], args[0] == "add")
 }
 
-// sessionsList：每台 core 的死活、是否跟随、终端数。
+// sessionsList 每台 core 的死活、是否跟随、终端数。
 func (e *Engine) sessionsList() string {
 	here := hccli.SessionsHere(e.Env, e.homeDirOr())
 	if len(here) == 0 {
@@ -381,8 +383,8 @@ func (e *Engine) firstSession() string {
 
 // newCardSelects /new 卡的下拉，agent 恒有。
 // session 只在跟随多个时出现 ( 单 session 的下拉是噪音 )，
-// 且只能选 bot 自己跟随的——不跟随的 session 开出来的终端没有镜像，
-// 等于黑洞。
+// 且只能选 bot 自己跟随的。
+// 不跟随的 session 开出来的终端没有镜像，等于黑洞。
 func (e *Engine) newCardSelects() []core.Select {
 	selects := []core.Select{{Name: "agent", Options: pickOptions(e.agentOptions())}}
 	if len(e.Sessions) > 1 {
@@ -431,7 +433,7 @@ func (e *Engine) onNewCard(click core.Click, v dialogValueParts) (core.ActionRes
 	}, nil
 }
 
-// newTerminalCard：/new 的开终端卡——目录输入与 agent 下拉同在一张表单：
+// newTerminalCard /new 的开终端卡目录输入与 agent 下拉同在一张表单：
 // 按钮点击不携带输入内容、只有表单提交带，两者要一次带走就得同表单。
 func (e *Engine) newTerminalCard(where core.Where) string {
 	markdown := "Which folder should it work in? Under your home, relative (`Projects/foo`)."
@@ -458,7 +460,7 @@ func (e *Engine) newTerminalCard(where core.Where) string {
 	return ""
 }
 
-// newTerminalNamed：旧语法——session 与 space/tab 点名。
+// newTerminalNamed 旧语法 session 与 space/tab 点名。
 func (e *Engine) newTerminalNamed(args []string) string {
 	session, place := args[0], args[1]
 	req := startRequest{session: session, command: strings.Join(args[2:], " ")}
@@ -489,7 +491,7 @@ func (e *Engine) newTerminalNamed(args []string) string {
 	return msg
 }
 
-// startTerminal：解析默认值并开终端，返回 ( 说给用户的话, 是否开成了 )。
+// startTerminal 解析默认值并开终端，返回 ( 说给用户的话, 是否开成了 )。
 func (e *Engine) startTerminal(req startRequest) (string, bool) {
 	session := req.session
 	if session == "" {
@@ -559,7 +561,7 @@ func (e *Engine) startTerminal(req startRequest) (string, bool) {
 		line, addressOfRun(out), session, space, tabName, folder, e.Chat.RoomWord()), true
 }
 
-// resolveFolder：home 下的相对路径 → 绝对路径；越界的拒绝。
+// resolveFolder home 下的相对路径 → 绝对路径；越界的拒绝。
 func (e *Engine) resolveFolder(rel string) (string, error) {
 	if strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "~") {
 		return "", fmt.Errorf("give a folder under your home (relative), not `%s`", rel)
@@ -572,7 +574,7 @@ func (e *Engine) resolveFolder(rel string) (string, error) {
 	return folder, nil
 }
 
-// spaceDefault：/new 的默认 space 名 ( HERDRCHAT_SPACE；未注入时 dev )。
+// spaceDefault /new 的默认 space 名 ( HERDRCHAT_SPACE；未注入时 dev )。
 func (e *Engine) spaceDefault() string {
 	if e.DefaultSpace != "" {
 		return e.DefaultSpace
@@ -580,7 +582,7 @@ func (e *Engine) spaceDefault() string {
 	return "dev"
 }
 
-// freeTabName：目录名做 tab 名；同 space 已有同名 tab 就 -2、-3 排下去。
+// freeTabName 目录名做 tab 名；同 space 已有同名 tab 就 -2、-3 排下去。
 func (e *Engine) freeTabName(space, base string) string {
 	if base == "" || base == "." || base == "/" {
 		base = "term"
@@ -624,7 +626,7 @@ func addressOfRun(out []byte) string {
 	return "?"
 }
 
-// typeInto 把一段文本送进终端——/history、/screen、/enter、/esc、/answer 这些房间命令之外，
+// typeInto 把一段文本送进终端 ( /history、/screen、/enter、/esc、/answer 这些房间命令之外 )，
 // 被对话框挡住时先暂存 ( 永不丢弃 )，正常时 hc send。
 func (e *Engine) typeInto(where core.Where, message core.Message, session, address, text string) error {
 	record, ok := e.viewOf(session).Get(address)
@@ -692,6 +694,7 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 					return nil
 				}
 			}
+
 			e.hold(k, state.WaitingMsg{Where: whereLabel(where), Message: string(message), Session: session, Address: address, Text: text})
 			// "上面的卡"必须在：有菜单却没有开着的卡，现在补发 ( again：已发过也发 )。
 			if dialog.Menu != nil && !e.openCardExists(k) {
@@ -699,15 +702,18 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 					xlog.For("engine").Warn("对话框卡片补发失败", "error", err)
 				}
 			}
+
 			_, err := e.Chat.Reply(e.ctx, where, "It asks something first (the card above). Your message goes in once that is answered.")
 			return err
 		}
 	}
 
 	// 发之前看一眼屏幕：
-	// 新生终端可能停在它自己的确认上 ( Claude/Codex 的目 // 录信任这一类 ) —— hc 不报 blocked、菜单常常没有编号，
-	// 盲发的话文本连着回车一起进去，恰好确认了高亮的 "No, exit"，终端当场退出。
-	// 屏幕在等确认就一个字都不发，把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
+	// 新生终端可能停在它自己的确认上 ( Claude/Codex 的目 // 录信任这一类 )，
+	// hc 不报 blocked、菜单常常没有编号，盲发的话文本连着回车一起进去，
+	// 恰好确认了高亮的 "No, exit"，终端当场退出。
+	// 屏幕在等确认就一个字都不发，
+	// 把屏幕发回去指路 ( 在 herdr-app 里选；这里无法替你选 )。
 	if !force {
 		if screen := e.screen(session, address, ScreenLines); screenWaitsConfirm(screen) {
 			_, err := e.Chat.Reply(e.ctx, where, "It waits on its own confirm (trust this folder?) — nothing was typed, so it stays put. Answer it in herdr-app: the ❯ marks the choice, Enter confirms, Esc cancels (and ends it).\n\n```\n"+hccli.TidyScreen(screen, DialogLines)+"\n```")
@@ -726,10 +732,12 @@ func (e *Engine) typeInto(where core.Where, message core.Message, session, addre
 		}
 		return nil // 已如实告知，不进重试
 	}
+
 	e.noteFromChat(k, typed)
 	if reader != nil {
 		e.noteUnanswered(k, true)
 	}
+
 	xlog.For("engine").Info("消息送入终端", "session", session, "address", address, "text", truncateRunes(text, 80))
 	if reader == nil {
 		// 不是 agent 的终端自己不会说话：回一屏它的屏幕。
@@ -789,7 +797,7 @@ func extOf(head []byte) string {
 	return "png"
 }
 
-// imagesInto 你发到房间的图片——落地、`hc put` 到终端旁边 ( 它的机器上 )，
+// imagesInto 你发到房间的图片落地、`hc put` 到终端旁边 ( 它的机器上 )，
 // 再把路径随文字一起输入 ( Claude Code 这类 agent 会自己打开 )。
 func (e *Engine) imagesInto(message core.Message, session, address string, refs [][]byte) []string {
 	if len(refs) == 0 || e.Inbox == "" {

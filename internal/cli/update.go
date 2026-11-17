@@ -48,7 +48,7 @@ type Release struct {
 	Assets map[string]string // 资产名 -> 下载地址
 }
 
-// assetName 算本平台的资产名——与 .goreleaser.yaml 的 name_template 一致
+// assetName 算本平台的资产名与 .goreleaser.yaml 的 name_template 一致
 // ( Os 首字母大写、amd64→x86_64、arm64→aarch64 )。
 func assetName(version string) string {
 	osName := strings.ToUpper(runtime.GOOS[:1]) + runtime.GOOS[1:]
@@ -71,7 +71,7 @@ func checksumName(version string) string {
 // ( App.Latest / App.Download 的默认实现；走环境里的代理设置 )。
 var updateHTTP = &http.Client{Timeout: 5 * time.Minute}
 
-//nolint:gosec // G704: url 来自 HERDRCHAT_UPDATE_API/REPO 与 release 自带的资产地址——用户自己的发布源，不是别人的输入
+//nolint:gosec // G704: url 来自 HERDRCHAT_UPDATE_API/REPO 与 release 自带的资产地址。
 func updateGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -165,7 +165,7 @@ func binaryFromTarball(tgz []byte) ([]byte, error) {
 
 // replaceBin 原子替换二进制：
 // 写到同目录的临时文件 ( 同一文件系统才有rename 的原子性 )，
-// chmod 后 rename 盖上——正在跑的旧进程继续用旧 inode，不受影响。
+// chmod 后 rename 盖上正在跑的旧进程继续用旧 inode，不受影响。
 func replaceBin(bin string, data []byte) error {
 	tmp := bin + ".herdrchat-new"
 

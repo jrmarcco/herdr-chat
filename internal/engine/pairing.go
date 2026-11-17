@@ -12,7 +12,8 @@ import (
 
 // 配对与 owner。
 // bot 还没有 owner 时，直聊里来的任何话都只走这里：
-// 码对了就认下这个人，其余一概不理 —— 没有 owner 的 bot 不替任何人起终端、杀终端。
+// 码对了就认下这个人，其余一概不理。
+// 没有 owner 的 bot 不替任何人起终端、杀终端。
 
 // RestartWait 是配对成功后、进程退出让位给新 owner 实例之前的等待。
 const RestartWait = 2 * time.Second

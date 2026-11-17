@@ -16,7 +16,7 @@ const (
 	partFile     = "file"
 	partFolded   = "folded"
 	bothParts    = "file,folded"
-	keyBotToken  = "TELEGRAM_BOT_TOKEN" //nolint:gosec // G101: 配置键名而非凭证值。
+	keyBotToken  = "TELEGRAM_BOT_TOKEN" //nolint:gosec // G101: 配置键名而非凭证值
 	envProfile   = "HERDRCHAT_PROFILE"
 	envHerdrHome = "HERDRCHAT_HOME"
 	profileWork  = "work"

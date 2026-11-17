@@ -257,7 +257,7 @@ func TestMenuKeyStableAcrossResizeRewrap(t *testing.T) {
 }
 
 // 语料库：
-// testdata/screens 下的真实抓屏，逐个解析 —— 有编号菜单的给出选项与稳定 key，
+// testdata/screens 下的真实抓屏，逐个解析有编号菜单的给出选项与稳定 key，
 // 没有的安静返回 nil；绝不 panic。
 func TestScreenCorpus(t *testing.T) {
 	entries, err := filepath.Glob("../../testdata/screens/*.txt")
@@ -295,7 +295,7 @@ func TestScreenCorpus(t *testing.T) {
 }
 
 // 合成按钮：
-// 屏幕没有编号、但自己声明了「Enter 前进 · Esc 取消」—— 按钮忠实转述这两条路；
+// 屏幕没有编号、但自己声明了「Enter 前进 · Esc 取消」按钮忠实转述这两条路；
 // 点击按它声明的键，绝不按数字。
 func TestConfirmMenuSynthesizedFromTheScreenOwnWords(t *testing.T) {
 	notice := " We're changing auto mode.\n\n Nothing breaks: auto mode keeps working.\n\n Enter to continue · Esc to cancel"

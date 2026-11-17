@@ -16,8 +16,10 @@ import (
 
 // 房间生命周期：
 // 一个房间照 herdr-app 展示终端的方式命名，
-// 归属 tab ( 按 herdr.tab 标签 id ) 而非恰好跑在里面的终端——终端被替换后，新的接管 tab 的房间。
-// keyOf：终端在 state 里的键，"<session>|tN"；别的机器上的终端是 "@<machine>|<machine>/tN"，
+// 归属 tab ( 按 herdr.tab 标签 id ) 而非恰好跑在里面的终端，终端被替换后，新的接管 tab 的房间。
+
+// keyOf 终端在 state 里的键，"<session>|tN"；
+// 别的机器上的终端是 "@<machine>|<machine>/tN"，
 // 机器名取跟随它的那个视角的叫法。
 func (e *Engine) keyOf(session, address string) string {
 	scope := session
@@ -185,7 +187,7 @@ func (e *Engine) viewOf(session string) *hccli.View {
 }
 
 // ensureRoom 确保一个终端的房间存在且跟得上。
-// 已存在的房间无条件放行 —— 终端已结束时的遗言与结束语也要发进去；
+// 已存在的房间无条件放行，终端已结束时的遗言与结束语也要发进去；
 // live + where + 跟随权 的门只拦 "新建"。
 // 新房间做历史回填。返回房间 id；
 // WAIT ( 旧终端还活着 ) 返回空。
@@ -262,7 +264,7 @@ func (e *Engine) refreshRoom(session string, record hccli.Terminal, k string, kn
 }
 
 // endRoom 终端没了，房间带着历史留下，
-// 标 ended——同一位置的新终端得到的就不会是老房间。
+// 标 ended，同一位置的新终端得到的就不会是老房间。
 func (e *Engine) endRoom(k string) {
 	known, ok := e.read().Chats[k]
 	if !ok || known.Ended {
@@ -290,7 +292,7 @@ func (e *Engine) reviveRoom(k string, known state.Room) {
 
 // endGone bot 停机期间结束的终端收不到 end 事件；
 // 每个 session 的首快照都到齐后，任何 session 里都不 live 的房间判 ended。
-// 别的机器上的终端只在那台机器连接着时才算真的没了——断连绝不会结束一个房间。
+// 别的机器上的终端只在那台机器连接着时才算真的没了，断连绝不会结束一个房间。
 func (e *Engine) endGone() {
 	connected := map[string]bool{}
 	for _, session := range e.Sessions {
@@ -376,7 +378,7 @@ func transcriptOf(items []core.Item) string {
 
 func clockOf(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
-// backfill 新房间不空白——这个终端之前的整段对话一份文件，
+// backfill 新房间不空白，这个终端之前的整段对话一份文件，
 // 最新一段一帖折叠；只取房间游标之前的内容 ( 其余照常发，不会来两遍 )；
 // 静默、只此一次。
 func (e *Engine) backfill(session string, record hccli.Terminal, k string, room core.Room, name string, parts map[string]bool) {

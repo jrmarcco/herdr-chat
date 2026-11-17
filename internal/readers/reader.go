@@ -35,7 +35,7 @@ type Reader interface {
 // 可选能力各自成接口，一个 app 可以有其中几项而没有其余 。
 type Dialoger interface {
 	// Dialog 从 agent 本身 ( 它的 API，或 herdrchat 的 hook ) 得知终端在等什么；
-	// 没有等什么返回 nil，在那台机器上无从得知返回 ErrNoHook —— 引擎立刻改为读屏。
+	// 没有等什么返回 nil，在那台机器上无从得知返回 ErrNoHook，引擎立刻改为读屏。
 	Dialog(ctx context.Context, session, address string) (*core.AgentDialog, error)
 }
 

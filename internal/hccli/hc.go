@@ -1,11 +1,12 @@
 // Package hccli 是对 hc CLI 的薄封装：
 // 每次调用都指名 session ( HC_SESSION )，绝不落在默认 core 上；
 // bot 自己跑在 hc 终端里，其环境中的 HC_TERMINAL_ID、
-// HC_SCOPE 与 HC_TERMINAL_SOCKET 会被剔掉——不剔的话，
-// bot 输入的内容会被 hc 包上 <hc from="tN"> 标签、当成另一个 agent 的留言，
+// HC_SCOPE 与 HC_TERMINAL_SOCKET 会被剔掉。
+// 不剔的话，bot 输入的内容会被 hc 包上 <hc from="tN"> 标签、当成另一个 agent 的留言，
 // 而不是像你亲手敲进去一样抵达。
 //
-// 每次调用都带 deadline；输出上限 16MB。
+// 每次调用都带 deadline；
+// 输出上限 16MB。
 package hccli
 
 import (

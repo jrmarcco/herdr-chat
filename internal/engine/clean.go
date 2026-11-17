@@ -10,7 +10,7 @@ import (
 	"github.com/jrmarcco/herdr-chat/internal/xlog"
 )
 
-// /clean：把已结束终端的残留清掉——
+// /clean 把已结束终端的残留清掉：
 //   - 房间：state 里标了 ended 的群解散 ( DeleteRoom )，连同游标/回执/暂存
 //     一起从 state 摘除；之后同 tab 再起终端会建新群；
 //   - 屏幕快照：本机各 session 的 screens/<地址>.snap 里，地址已不在事件流
@@ -21,8 +21,8 @@ import (
 // cleanKey 是 /clean 确认卡的对话框 key ( onAction 据此拦截，不走终端 )。
 const cleanKey = "clean-confirm"
 
-// cleanEnded 清理已结束终端的残留。两步：先 `/clean` 发确认卡，点按钮动手——
-// 解散群聊不可逆，绝不一步就干。`/clean yes` 是按钮不可用时的文字兜底。
+// cleanEnded 清理已结束终端的残留。两步：先 `/clean` 发确认卡，
+// 点按钮动手解散群聊不可逆，绝不一步就干。`/clean yes` 是按钮不可用时的文字兜底。
 func (e *Engine) cleanEnded(args []string, where core.Where) string {
 	if e.ctx == nil || e.ctx.Err() != nil {
 		return "The bot is stopping: not now."

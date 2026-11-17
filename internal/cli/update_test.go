@@ -21,7 +21,7 @@ import (
 )
 
 // `herdrchat update` 的行为测试：
-// 查、比、下载、校验、替换、重启——全部在注入的 Latest/Download 与临时目录上跑，网络一个不出。
+// 查、比、下载、校验、替换、重启，全部在注入的 Latest/Download 与临时目录上跑，网络一个不出。
 //
 // makeTarball 打一个 release 形状的 tar.gz：根目录 herdrchat + README。
 func makeTarball(t *testing.T, binary []byte) []byte {
@@ -75,7 +75,8 @@ func fakeRelease(t *testing.T, version string, tgz []byte) (Release, map[string]
 
 const cmdUpdate = "update"
 
-func updateApp(t *testing.T, version string, rel Release, files map[string][]byte) (*App, *bytes.Buffer) { //nolint:unparam // 升级前都是 1.0.0
+//nolint:unparam // 升级前都是 1.0.0。
+func updateApp(t *testing.T, version string, rel Release, files map[string][]byte) (*App, *bytes.Buffer) {
 	t.Helper()
 	a, out, _ := newApp(t)
 	a.Version = version
@@ -90,12 +91,14 @@ func updateApp(t *testing.T, version string, rel Release, files map[string][]byt
 	return a, out
 }
 
-func (a *App) putOldBin(t *testing.T, content string) { //nolint:unparam // 旧二进制都叫 old
+//nolint:unparam // 旧二进制都叫 old。
+func (a *App) putOldBin(t *testing.T, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(a.Bin), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(a.Bin, []byte(content), 0o755); err != nil { //nolint:gosec // G306: 二进制要可执行
+	//nolint:gosec // G306: 二进制要可执行。
+	if err := os.WriteFile(a.Bin, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -104,6 +107,7 @@ func TestAssetNamesMatchTheReleaseTemplate(t *testing.T) {
 	if got := assetName("1.2.3"); !strings.HasPrefix(got, "herdrchat_1.2.3_") || !strings.HasSuffix(got, ".tar.gz") {
 		t.Fatalf("asset = %s", got)
 	}
+
 	os, arch := runtime.GOOS, runtime.GOARCH
 	switch arch {
 	case "amd64":

@@ -10,7 +10,7 @@ import (
 
 // deliver 的重试只留给会变的局面：
 // 无错也无房 ( 未展示的终端、tab 被占着 ) 时立刻收场，
-// 不占着车道空等——一次 sleep 都不该有。
+// 不占着车道空等，一次 sleep 都不该有。
 func TestDeliverStopsWhenNoRoomAndNoError(t *testing.T) {
 	r := harness(t)
 	slept := false

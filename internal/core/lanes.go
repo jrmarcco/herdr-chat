@@ -9,7 +9,7 @@ import "sync"
 // 错误由调用方持有 ( 引擎把 ErrMachineDown 变成挂起的房间、其余记日志 )；
 // 车道绝不吞错。
 //
-// 每个 key 一把互斥锁恰是一条串行车道 —— Do。
+// 每个 key 一把互斥锁恰是一条串行车道 Do。
 // 自己不排队，只是在该key 先前的工作完成前不返回。
 type Lanes struct {
 	mu    sync.Mutex

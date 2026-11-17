@@ -57,7 +57,7 @@ func TestNewFolderRules(t *testing.T) {
 		t.Fatalf("in-home .. rejected: runs=%+v out=%q", r.hc.Runs, out)
 	}
 
-	// 旧语法：目录承自兄弟终端——在 home 内的沿用，落在 $HOME 的不学。
+	// 旧语法：目录承自兄弟终端在 home 内的沿用，落在 $HOME 的不学。
 	// ( 兄弟记录经 SetTerminal 换：直改 map 会与 sweep 的并发读赛跑。 )
 	sibling := func(cwd string) {
 		rec := term("t1")

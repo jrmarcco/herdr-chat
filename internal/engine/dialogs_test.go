@@ -57,7 +57,7 @@ func (r *rig) dialogCardValue() map[string]any {
 	return nil
 }
 
-// click 按已发出的卡构造一次点击——消息 id 来自 openCards，
+// click 按已发出的卡构造一次点击消息 id 来自 openCards，
 // 值来自卡片的dialogValue，再叠上 pick/label/ticks/自由输入。
 func (r *rig) click(pick, label, answer string) core.Click {
 	st, _ := r.store.Read()
@@ -298,7 +298,7 @@ func TestAgentDialogThroughItsAPI(t *testing.T) {
 	if !strings.Contains(result.Toast, "✔") {
 		t.Errorf("toast = %q", result.Toast)
 	}
-	// 答完要随回调响应整卡换上关卡的样 ( 按钮随之消失——PATCH 换不掉 )。
+	// 答完要随回调响应整卡换上关卡的样 ( 按钮随之消失，PATCH 换不掉 )。
 	if result.Card == nil || result.Card.Tone != core.ToneDone {
 		t.Errorf("answered card = %+v, want the done look", result.Card)
 	}
@@ -432,7 +432,8 @@ func TestRestartRestoresOpenCard(t *testing.T) {
 
 // turn 结束是提问卡的确定性收口：
 // 即使 hc 的 status 事件不来 ( 离开 blocked 的关卡扑空 )，
-// 终答发完也得把卡关掉——点完只回 toast 的话，卡永远橙着。
+// 终答发完也得把卡关掉。
+// 点完只回 toast 的话，卡永远橙着。
 func TestTurnDoneClosesTheDialogCard(t *testing.T) {
 	r := harness(t)
 	r.start(t)
@@ -511,7 +512,7 @@ func TestForgetDialogForgetsTheClaim(t *testing.T) {
 }
 
 // status 没说 kind/msg 的无菜单对话框：名字有兜底，
-// 不再与 postedDialog 的零值 ( 从未发过 ) 撞车——第一张卡发得出去。
+// 不再与 postedDialog 的零值 ( 从未发过 ) 撞车，第一张卡发得出去。
 func TestPostBlockedNamesANamelessDialog(t *testing.T) {
 	r := harness(t)
 	r.reader.DialogErr = readers.ErrNoHook
@@ -529,8 +530,8 @@ func TestPostBlockedNamesANamelessDialog(t *testing.T) {
 	}
 }
 
-// 「Enter to continue · Esc to cancel」形状的告知：合成按钮卡——
-// 走 PostDialog ( 不是文字 )、进 openCards；点击按 enter，绝不按数字。
+// 「Enter to continue · Esc to cancel」形状的告知：合成按钮卡走 PostDialog ( 不是文字 )、进 openCards；
+// 点击按 enter，绝不按数字。
 func TestConfirmNoticeBecomesAButtonCard(t *testing.T) {
 	r := harness(t)
 	r.start(t)
@@ -577,7 +578,7 @@ func TestConfirmNoticeBecomesAButtonCard(t *testing.T) {
 	}
 }
 
-// 光标选择 ( ❯ ) 的确认屏绝不合成按钮——Enter 跟光标走，按什么全看它指着哪。
+// 光标选择 ( ❯ ) 的确认屏绝不合成按钮 Enter 跟光标走，按什么全看它指着哪。
 func TestCursorChoiceStaysATextCard(t *testing.T) {
 	r := harness(t)
 	r.reader.DialogErr = readers.ErrNoHook

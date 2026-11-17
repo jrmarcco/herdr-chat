@@ -11,7 +11,7 @@ import (
 )
 
 // 发送前的查屏 ( 信任确认这一类 hc 不报 blocked 的对话框 )：
-// 在 herdr-app 里由人确认，这里绝不盲发 —— 盲发的回车恰好确认 "No, exit"，终端当场退出。
+// 在 herdr-app 里由人确认，这里绝不盲发，盲发的回车恰好确认 "No, exit"，终端当场退出。
 
 const (
 	termTrust = "t9"
@@ -28,7 +28,7 @@ func TestNothingTypedIntoAWaitingConfirm(t *testing.T) {
 	r := harness(t)
 	r.start(t)
 
-	// 一个还没有注册成 agent 的终端 ( 新生的 claude 停在目录信任上 )——走正式的事件通路进来，视图里才有它。
+	// 一个还没有注册成 agent 的终端 ( 新生的 claude 停在目录信任上 ) 走正式的事件通路进来，视图里才有它。
 	r.hc.Change(sessDefault, "created", termTrust, map[string]any{
 		keyAddress: termTrust, keyState: stateLive,
 		keyLabels: map[string]any{keyWhere: whereAPI, keySpace: spaceID, keyTabLabel: tabTrust},
@@ -118,7 +118,8 @@ func TestScreenWaitsConfirmOverTheCorpus(t *testing.T) {
 	}
 }
 
-// /enter：只按回车、不注入文字 —— "Enter to continue · Esc to cancel" 类告知框的确认钥匙，与 /esc 对称。
+// /enter：只按回车、不注入文字。
+// "Enter to continue · Esc to cancel" 类告知框的确认钥匙，与 /esc 对称。
 func TestEnterPressesEnterAndNothingElse(t *testing.T) {
 	r := harness(t)
 	r.start(t)

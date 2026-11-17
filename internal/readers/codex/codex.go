@@ -202,8 +202,8 @@ func EntryItems(entry map[string]any) []core.Item {
 	}
 }
 
-// meterOf：一条 token_count——上下文多满 ( 上次请求的 token，占模型的窗口 )
-// 与回复说出的每条限额 ( 按窗口时长命名 )。
+// meterOf 一条 token_count，
+// 上下文多满 ( 上次请求的 token，占模型的窗口 ) 与回复说出的每条限额 ( 按窗口时长命名 )。
 func meterOf(payload map[string]any) []core.Item {
 	info, _ := payload["info"].(map[string]any)
 	var context *core.ContextUse
@@ -455,8 +455,8 @@ func RequestWords(tool string, input map[string]any) string {
 	return strings.Join(parts, "\n")
 }
 
-// AskDialog 把 hook 的请求做成卡：Yes / No / Answer in the terminal——Codex 只在
-// hook 结束后才显示自己的提示，"在终端里答" 就是把决定交还给它 ( 空决定 )；
+// AskDialog 把 hook 的请求做成卡：Yes / No / Answer in the terminal，
+// Codex 只在 hook 结束后才显示自己的提示，"在终端里答" 就是把决定交还给它 ( 空决定 )；
 // Esc 也是 No ( Codex 自己的提示把 Esc 当 No )。
 func AskDialog(ask *asks.Ask) *core.AgentDialog {
 	req := map[string]any{}
@@ -515,8 +515,7 @@ func Decide(ask *asks.Ask, shown *core.AgentDialog, reply core.Reply) *asks.Deci
 	return nil
 }
 
-// IsOf：一条没指名终端的请求 ( Codex 经共享后台服务 ) 是否属于该终端——
-// 它的会话就是该终端日志的那个。
+// IsOf 一条没指名终端的请求 ( Codex 经共享后台服务 ) 是否属于该终端它的会话就是该终端日志的那个。
 func IsOf(ask *asks.Ask, file string) bool {
 	if file == "" {
 		return false
@@ -550,5 +549,5 @@ func (r *Reader) StrayAsk(ctx context.Context, session, address string) (string,
 	return "", nil
 }
 
-// AsksIdle：它有些提问不挡工作 ( 异步的 )——core 在 turn 结束时也问 dialog。
+// AsksIdle 它有些提问不挡工作 ( 异步的 ) core 在 turn 结束时也问 dialog。
 func (r *Reader) AsksIdle() bool { return true }

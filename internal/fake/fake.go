@@ -45,7 +45,7 @@ type FakeChat struct {
 	Handlers chats.Handlers
 }
 
-// NewFakeChat 建一个 owner 已知 ( Ready 为 true ) 的实例——这才是有意义的状态；
+// NewFakeChat 建一个 owner 已知 ( Ready 为 true ) 的实例，这才是有意义的状态；
 // 测试需要时再翻转它。
 func NewFakeChat() *FakeChat { return &FakeChat{ready: true} }
 
@@ -399,7 +399,7 @@ func (f *FakeHC) Turn(session, address, stateWord string) {
 	}
 }
 
-// Change 触发其余任意事件——先像真实事件流的 apply 那样应用到 fake 的终端记录上，让引擎看到的记录是最新的。
+// Change 触发其余任意事件，先像真实事件流的 apply 那样应用到 fake 的终端记录上，让引擎看到的记录是最新的。
 func (f *FakeHC) Change(session, typ, address string, data map[string]any) {
 	f.mu.Lock()
 	record := cloneTerm(f.Terminals[address])

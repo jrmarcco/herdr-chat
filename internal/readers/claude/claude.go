@@ -97,7 +97,7 @@ func textOf(content any) string {
 	return ""
 }
 
-// isNarration：带词的 thinking 块、签名里写着 narration——它工作时说的话只落盘在这种块里。
+// isNarration：带词的 thinking 块、签名里写着 narration，它工作时说的话只落盘在这种块里。
 func isNarration(block map[string]any) bool {
 	if block["type"] != "thinking" {
 		return false
@@ -139,7 +139,7 @@ func toolLine(block map[string]any) string {
 }
 
 // taskCard：Claude 把活儿交给子代理 ( Task 工具 ) 时，
-// 会话里单独成卡的一笔委托——交待了什么。
+// 会话里单独成卡的一笔委托，交待了什么。
 func taskCard(block map[string]any) *core.Card {
 	if block["name"] != "Task" {
 		return nil

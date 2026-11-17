@@ -48,7 +48,7 @@ func TestDevKnowsItself(t *testing.T) {
 }
 
 // Go 模块伪版本 ( 本地构建的 Main.Version ) 也是开发构建：
-// v1.0.4-0.x 是 1.0.4 的预发布，比 1.0.4 旧——update 不许把它当正式版拒掉真发布。
+// v1.0.4-0.x 是 1.0.4 的预发布，比 1.0.4 旧， update 不许把它当正式版拒掉真发布。
 func TestPseudoVersionsAreDevBuilds(t *testing.T) {
 	for _, v := range []string{
 		"v1.0.4-0.20261116153509-5066e1175433",

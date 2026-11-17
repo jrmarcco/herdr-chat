@@ -25,7 +25,7 @@ import (
 // 屏幕自己声明了「Enter 前进 · Esc 取消」的确认 ( core.ConfirmMenuOf 合成转述按钮 )；
 // 光标选择 ( ❯ ) 屏绝不合成。
 // 一个对话框一张卡；
-// 点卡片前先复核屏幕还是那个对话框——旧卡永远答不了长得像的新问题。
+// 点卡片前先复核屏幕还是那个对话框，旧卡永远答不了长得像的新问题。
 //
 // 采信一屏菜单的节奏：
 // blocked 到达的瞬间屏幕可能还没画完，要顶边框、且相隔DRAW_WAIT 的两次读到同一个 key，
@@ -229,7 +229,7 @@ func agentDialog(d *core.AgentDialog, status hccli.Terminal) core.Dialog {
 	return core.Dialog{Menu: menu, Title: title, Markdown: escapeMarkdown(d.Text), DoneTitle: DoneTitle}
 }
 
-// askedNow：终端现在在等什么——agent 自己说优先 ( 它屏幕的重画打不断 )，
+// askedNow 终端现在在等什么 agent 自己说优先 ( 它屏幕的重画打不断 )，
 // 否则读屏。
 func (e *Engine) askedNow(session, address string, record hccli.Terminal) core.Dialog {
 	if reader := e.agentOf(record); reader != nil {
@@ -303,7 +303,7 @@ func valueOf(click core.Click) dialogValueParts {
 	return out
 }
 
-// stillAsks 终端是否仍在等这张卡的问题——blocked 着；
+// stillAsks 终端是否仍在等这张卡的问题 blocked 着；
 // 或它的 hook 还在问 ( Codex 一边干活一边等 hook )；
 // 或不挡工作的提问 ( idle ) 还没开工。
 func (e *Engine) stillAsks(record hccli.Terminal, dialog core.Dialog) bool {
@@ -401,7 +401,7 @@ func (e *Engine) postBlocked(session, address string, record hccli.Terminal, aga
 	return nil
 }
 
-// postIdleAsk：不挡工作的提问 ( reader 的 Dialog 标了 Idle )——turn 发完再发卡，
+// postIdleAsk 不挡工作的提问 ( reader 的 Dialog 标了 Idle )，turn 发完再发卡，
 // sweep 里没有卡也补一张。
 func (e *Engine) postIdleAsk(session, address string, record hccli.Terminal) {
 	reader := e.agentOf(record)
@@ -429,7 +429,7 @@ func (e *Engine) postIdleAsk(session, address string, record hccli.Terminal) {
 	xlog.For("engine").Info("idle 提问卡片发出", "session", session, "address", address)
 }
 
-// sendBlocked：把对话框发出去——有菜单是一张带按钮的卡 ( 置顶 + 响铃 )；
+// sendBlocked 把对话框发出去，有菜单是一张带按钮的卡 ( 置顶 + 响铃 )；
 // 没有菜单是一段文字加 /answer /enter /esc 指引。
 func (e *Engine) sendBlocked(session, address string, record hccli.Terminal, k string, dialog core.Dialog) error {
 	e.closeCard(k, "It moved on; see the next card.")
@@ -492,7 +492,7 @@ func (e *Engine) pinIfRoom(k string, msg core.Message) {
 	}
 }
 
-// pickKeys 选一个选项要按的键——数字；
+// pickKeys 选一个选项要按的键数字；
 // 带预览框的问题不吃数字，从光标用方向键走到它，再 Enter。
 func pickKeys(menu *core.Menu, option core.MenuOption) []string {
 	if !menu.Beside {
@@ -510,7 +510,7 @@ func pickKeys(menu *core.Menu, option core.MenuOption) []string {
 	return append(keys, "enter")
 }
 
-// answerFree："Type something"：先选中那一项，再把话打进去。
+// answerFree "Type something" 先选中那一项，再把话打进去。
 func (e *Engine) answerFree(session, address string, menu *core.Menu, text string) error {
 	if err := e.HC.Keys(e.ctx, session, address, pickKeys(menu, *menu.Free)); err != nil {
 		return err
@@ -542,7 +542,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 		return answeredToast("Cancelled. Nothing was deleted."), nil
 	}
 
-	// /new 的开终端卡：同样不走终端——表单提交 ( 目录 + agent 下拉 ) 直接开。
+	// /new 的开终端卡：同样不走终端，表单提交 ( 目录 + agent 下拉 ) 直接开。
 	if v.K == newKey {
 		return e.onNewCard(click, v)
 	}
@@ -753,7 +753,7 @@ func (e *Engine) onActionDialog(click core.Click) (core.ActionResult, error) {
 	xlog.For("engine").Info("点击已按键", "session", v.S, "address", v.A, "picked", picked)
 
 	// 按完键对话框已不在 ( 答掉了 )：
-	// 卡片要收场——登记在按键前已摘，"离开 blocked" 的关卡不会再来补这一刀 ( 教训记在这 )。
+	// 卡片要收场登记在按键前已摘，"离开 blocked" 的关卡不会再来补这一刀 ( 教训记在这 )。
 	closeIfAnswered := func(term hccli.Terminal, err error) {
 		if err != nil || term.State() == stateBlocked {
 			return
@@ -966,8 +966,8 @@ func (e *Engine) answerOwn(click core.Click, v dialogValueParts, record hccli.Te
 	return core.ActionResult{Toast: "✔ " + picked, Card: doneLook(asked, "✔ "+picked)}, nil
 }
 
-// doneLook 是关卡后的样子：灰头、原文、一行结论——随点击的回调响应整卡
-// 换上 ( 按钮随之消失；PATCH 换不掉交互组件，只有这条路 )。
+// doneLook 是关卡后的样子：灰头、原文、一行结论，
+// 随点击的回调响应整卡换上 ( 按钮随之消失；PATCH 换不掉交互组件，只有这条路 )。
 func doneLook(d core.Dialog, done string) *core.Look {
 	md := d.Markdown
 	if md == "" {

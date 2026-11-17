@@ -113,7 +113,7 @@ func NewView() *View {
 // 引擎不派发任何 lane。
 func (v *View) SnapshotDone() <-chan struct{} { return v.snapshot }
 
-// MarkSnapshotDone 手动关闭首快照闸门——供没有真实进程可依赖的 fake 使用。
+// MarkSnapshotDone 手动关闭首快照闸门，供没有真实进程可依赖的 fake 使用。
 // 重复调用无副作用。
 func (v *View) MarkSnapshotDone() {
 	select {
@@ -158,7 +158,7 @@ func (v *View) Delete(address string) {
 	delete(v.terminals, address)
 }
 
-// ApplySnapshot 用一份快照替换 view 中的全部——即事件流首行与每个 `missed` 携带的内容。
+// ApplySnapshot 用一份快照替换 view 中的全部，即事件流首行与每个 `missed` 携带的内容。
 // 真实跟随器与 fake 共用它，两者以同一方式维护 view。
 func (v *View) ApplySnapshot(list []Terminal) {
 	v.mu.Lock()
@@ -340,11 +340,9 @@ func (c *CLI) eventsOnce(ctx context.Context, session string, h EventHandlers, v
 	sc.Buffer(make([]byte, 64<<10), eventsMaxLine)
 
 	// 静默看门狗：hc 的流每 ~17s 一条心跳，事件更密。
-	// 长连订阅者偶发"拿到快照后核心不再向它投递"（连接开着、进程活着、什么也收不到——手动新订阅者一切正常，见上游排查记录），
-	// 进程不死循环也就不重启，引擎从此全聋。
-	// 任何行 ( 事件/心跳/快照 ) 都算活着；
-	// 静默超过 eventsQuiet 就杀掉子进程，
-	// 让既有的重启循环带一条新连接回来。
+	// 长连订阅者偶发 "拿到快照后核心不再向它投递" ( 连接开着、进程活着、什么也收不到，手动新订阅者一切正常，见上游排查记录 )，
+	// 进程不死循环也就不重启，引擎从此全聋。任何行 ( 事件/心跳/快照 ) 都算活着；
+	// 静默超过 eventsQuiet 就杀掉子进程，让既有的重启循环带一条新连接回来。
 	lastLine := time.Now()
 	lineSeen := make(chan struct{}, 1)
 	watchdogDone := make(chan struct{})

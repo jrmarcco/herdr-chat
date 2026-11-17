@@ -17,7 +17,7 @@ import (
 // 群静音、你自己的标签 ( feed group )、置顶。
 //
 // 你在直聊里 `/auth` 授权一次
-// ( OAuth 设备流：无需公网地址——bot 给出链接与 code，你在飞书里确认，bot 后台轮询 token )。
+// ( OAuth 设备流：无需公网地址，bot 给出链接与 code，你在飞书里确认，bot 后台轮询 token )。
 //
 // token 到期前自动刷新，存 state 目录的 user-token.json ( 0600 )，绝不入日志。
 // 这里发出的调用仅限本文件列出的那些。
@@ -232,7 +232,7 @@ func orInt(v, fallback int) int {
 // Token 给出可用的 access token：
 // 没过期的直接用，快过期的刷新；没有或刷新不了返回 ""。
 // 刷新被拒 ( token 撤销 ) 也返回 ""，
-// 网络不通则报错——片刻离线不该被当成撤销的 /auth。
+// 网络不通则报错，片刻离线不该被当成撤销的 /auth。
 func (u *UserAuth) Token(ctx context.Context) (string, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()

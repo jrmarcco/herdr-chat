@@ -20,7 +20,7 @@ const (
 )
 
 // 它的对话框，走 herdrchat 的 hook ( asks 包 )：
-// hook 运行期间 Claude 问你的 —— 一次工具授权 ( Yes；Claude 给了规则时还有 "不再问"；No )、
+// hook 运行期间 Claude 问你的一次工具授权 ( Yes；Claude 给了规则时还有 "不再问"；No )、
 // 它的提问 ( AskUserQuestion：一题一卡、多选框、自己的话，答案合在一起回去 )、它的计划 ( ExitPlanMode )。
 // Esc 会打断 Claude，和在它自己的提示里按 Esc 一样。没有 hook ( 或 hook 没看见的对话框 ) 照旧读屏。
 

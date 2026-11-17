@@ -76,8 +76,9 @@ type Dialog struct {
 	Markdown  string
 	DoneTitle string
 	Footer    string
-	// Selects 可选：与 Free 同一张表单里的下拉 ( /new 选 agent、session 这类 )——
-	// 按钮点击不携带输入内容，只有表单提交带；要输入+选择一次带走就得同表单。
+	// Selects 可选：
+	// 与 Free 同一张表单里的下拉 ( /new 选 agent、session 这类 ) 按钮点击不携带输入内容，
+	// 只有表单提交带；要输入+选择一次带走就得同表单。
 	Selects []Select
 	// Submit 可选：表单提交按钮的动词 ( 空 = "Start"；/kill 用 "End" )。
 	Submit string

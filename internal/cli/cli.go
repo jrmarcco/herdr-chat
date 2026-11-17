@@ -475,7 +475,7 @@ func (a *App) loopScript(pl config.Places) string {
 	}
 	// 只引二进制的路径：把 "run" 一起引进去，
 	// sh 会去找一个名字里带空格的可执行文件
-	// ( 127 not found —— 教训记在这 )。
+	// ( 127 not found 教训记在这 )。
 	return script + "while true; do " + shell.Quote(a.Bin) + " run" + `; echo "herdrchat stopped ($?), starting again in 3 s"; sleep 3; done`
 }
 
